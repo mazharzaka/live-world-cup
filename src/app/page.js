@@ -118,6 +118,34 @@ export default function HomePage() {
   const [hasError, setHasError]         = useState(false);     // خطأ في البث
   const [arabicDate, setArabicDate]     = useState('');        // التاريخ (client-only لتجنب hydration mismatch)
 
+  // Custom Video Player States
+  const [isPlaying, setIsPlaying]       = useState(false);
+  const [isMuted, setIsMuted]           = useState(true);
+  const [volume, setVolume]             = useState(0.5);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+
+  const controlsTimeoutRef = useRef(null);
+
+  const resetControlsTimeout = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      const video = videoRef.current;
+      if (video && !video.paused) {
+        setShowControls(false);
+      }
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, []);
+
   // ─── RTK Query ──────────────────────────────────────────────────────────
   const { data, isLoading: loadingMatches, isError: scheduleError } = useGetScheduleQuery();
   const matches = data || [];
@@ -233,6 +261,87 @@ export default function HomePage() {
   const handleVideoPlaying = () => {
     setIsLoadingStream(false);
     setHasError(false);
+    setIsPlaying(true);
+    resetControlsTimeout();
+  };
+
+  const handlePlayPause = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play().then(() => setIsPlaying(true)).catch(() => {});
+    } else {
+      video.pause();
+      setIsPlaying(false);
+    }
+    resetControlsTimeout();
+  }, [resetControlsTimeout]);
+
+  const handleMuteToggle = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+    setIsMuted(video.muted);
+    if (video.muted) {
+      setVolume(0);
+    } else {
+      setVolume(video.volume || 0.5);
+    }
+    resetControlsTimeout();
+  }, [resetControlsTimeout]);
+
+  const handleVolumeChange = useCallback((e) => {
+    const val = parseFloat(e.target.value);
+    const video = videoRef.current;
+    if (!video) return;
+    video.volume = val;
+    setVolume(val);
+    if (val === 0) {
+      video.muted = true;
+      setIsMuted(true);
+    } else {
+      video.muted = false;
+      setIsMuted(false);
+    }
+    resetControlsTimeout();
+  }, [resetControlsTimeout]);
+
+  const handleFullscreenToggle = useCallback(() => {
+    const wrapper = document.getElementById('video-wrapper');
+    if (!wrapper) return;
+    if (!document.fullscreenElement) {
+      wrapper.requestFullscreen().then(() => setIsFullscreen(true)).catch((err) => {
+        console.error('Error entering fullscreen:', err);
+      });
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+    resetControlsTimeout();
+  }, [resetControlsTimeout]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  const handlePlayEvent = () => {
+    setIsPlaying(true);
+    resetControlsTimeout();
+  };
+
+  const handlePauseEvent = () => {
+    setIsPlaying(false);
+    setShowControls(true);
+  };
+
+  const handleVolumeChangeEvent = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    setIsMuted(video.muted);
+    setVolume(video.muted ? 0 : video.volume);
   };
 
   /**
@@ -280,7 +389,12 @@ export default function HomePage() {
 
           {/* ─── Video Wrapper ──────────────────────────────────────────── */}
           <div className="video-container">
-            <div className="video-wrapper" id="video-wrapper">
+            <div 
+              className="video-wrapper" 
+              id="video-wrapper"
+              onMouseMove={resetControlsTimeout}
+              onMouseLeave={() => isPlaying && setShowControls(false)}
+            >
 
               {/* Placeholder: قبل اختيار مباراة */}
               {!currentMatch && (
@@ -344,7 +458,6 @@ export default function HomePage() {
               <video
                 ref={videoRef}
                 id="main-video"
-                controls
                 autoPlay
                 muted
                 playsInline
@@ -357,12 +470,101 @@ export default function HomePage() {
                 onLoadStart={handleVideoLoadStart}
                 onError={handleVideoError}
                 onPlaying={handleVideoPlaying}
+                onPlay={handlePlayEvent}
+                onPause={handlePauseEvent}
+                onVolumeChange={handleVolumeChangeEvent}
+                onClick={handlePlayPause}
+                onDoubleClick={handleFullscreenToggle}
                 aria-label={
                   currentMatch
                     ? `يتم بث مباراة ${currentMatch.homeTeam} ضد ${currentMatch.awayTeam}`
                     : 'مشغل الفيديو'
                 }
               />
+
+              {/* زر تشغيل مركزي مخصص عند الإيقاف المؤقت */}
+              {currentMatch && !isLoadingStream && !hasError && !isPlaying && (
+                <button 
+                  className="video-center-btn" 
+                  onClick={handlePlayPause}
+                  aria-label="تشغيل"
+                >
+                  <span className="play-icon">▶</span>
+                </button>
+              )}
+
+              {/* شريط التحكم المخصص السفلي */}
+              {currentMatch && !isLoadingStream && !hasError && (
+                <div className={`video-controls-bar ${showControls ? 'visible' : ''}`}>
+                  {/* اليسار: أزرار التحكم والتشغيل والصوت */}
+                  <div className="controls-left">
+                    <button 
+                      className="control-btn play-pause-btn" 
+                      onClick={handlePlayPause}
+                      aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
+                    >
+                      {isPlaying ? '⏸' : '▶'}
+                    </button>
+
+                    <div className="volume-control-group">
+                      <button 
+                        className="control-btn mute-btn" 
+                        onClick={handleMuteToggle}
+                        aria-label={isMuted ? 'إلغاء كتم الصوت' : 'كتم الصوت'}
+                      >
+                        {isMuted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
+                      </button>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="1" 
+                        step="0.05"
+                        value={volume}
+                        onChange={handleVolumeChange}
+                        className="volume-slider"
+                        aria-label="مستوى الصوت"
+                      />
+                    </div>
+                  </div>
+
+                  {/* الوسط: اسم المباراة وبادج البث المباشر */}
+                  <div className="controls-center">
+                    <span className="controls-live-badge">
+                      <span className="controls-live-dot" />
+                      مباشر
+                    </span>
+                    <span className="controls-match-title">
+                      {currentMatch.homeTeam} vs {currentMatch.awayTeam}
+                    </span>
+                  </div>
+
+                  {/* اليمين: ملء الشاشة والـ PIP */}
+                  <div className="controls-right">
+                    <button 
+                      className="control-btn pip-btn" 
+                      onClick={() => {
+                        const video = videoRef.current;
+                        if (!video) return;
+                        if (document.pictureInPictureElement) {
+                          document.exitPictureInPicture();
+                        } else if (video.requestPictureInPicture) {
+                          video.requestPictureInPicture();
+                        }
+                      }}
+                      aria-label="صورة داخل صورة"
+                    >
+                      📺
+                    </button>
+                    <button 
+                      className="control-btn fullscreen-btn" 
+                      onClick={handleFullscreenToggle}
+                      aria-label={isFullscreen ? 'خروج من ملء الشاشة' : 'ملء الشاشة'}
+                    >
+                      {isFullscreen ? '⏹' : '⛶'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
