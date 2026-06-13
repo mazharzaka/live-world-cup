@@ -166,28 +166,22 @@ export default function HomePage() {
     video.load();
     video.classList.remove('visible');
 
-    // جلب رابط البث من السيرفر
-    setTimeout(async () => {
+    // جلب رابط البث من السيرفر بتوجيه عنصر الفيديو له مباشرة
+    setTimeout(() => {
       try {
-        const streamApiUrl = `http://localhost:3001/api/stream?url=${encodeURIComponent(match.targetSiteUrl)}`;
-        const response = await fetch(streamApiUrl);
-        const data = await response.json();
-
-        if (data.m3u8Url) {
-          video.src = data.m3u8Url;
-          video.load();
-          video.play().catch(() => {
-            // autoplay قد يكون محظوراً → لا بأس، المستخدم يضغط play يدوياً
-          });
-        } else {
-          setIsLoadingStream(false);
-          setHasError(true);
-          alert(data.error || 'لم يتم العثور على رابط m3u8');
-        }
+        const altsParam = match.alternativeUrls && match.alternativeUrls.length > 0
+          ? `&alts=${encodeURIComponent(match.alternativeUrls.join(','))}`
+          : '';
+        const streamApiUrl = `http://localhost:3001/api/stream?url=${encodeURIComponent(match.targetSiteUrl)}${altsParam}`;
+        video.src = streamApiUrl;
+        video.load();
+        video.play().catch(() => {
+          // autoplay قد يكون محظوراً → لا بأس، المستخدم يضغط play يدوياً
+        });
       } catch (err) {
         setIsLoadingStream(false);
         setHasError(true);
-        console.error('Error fetching stream:', err);
+        console.error('Error setting stream src:', err);
       }
     }, 100);
   }, []);

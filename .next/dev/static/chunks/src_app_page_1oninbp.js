@@ -381,30 +381,23 @@ function HomePage() {
             video.removeAttribute('src');
             video.load();
             video.classList.remove('visible');
-            // جلب رابط البث من السيرفر
+            // جلب رابط البث من السيرفر بتوجيه عنصر الفيديو له مباشرة
             setTimeout({
-                "HomePage.useCallback[handleWatchMatch]": async ()=>{
+                "HomePage.useCallback[handleWatchMatch]": ()=>{
                     try {
-                        const streamApiUrl = `http://localhost:3001/api/stream?url=${encodeURIComponent(match.targetSiteUrl)}`;
-                        const response = await fetch(streamApiUrl);
-                        const data = await response.json();
-                        if (data.m3u8Url) {
-                            video.src = data.m3u8Url;
-                            video.load();
-                            video.play().catch({
-                                "HomePage.useCallback[handleWatchMatch]": ()=>{
-                                // autoplay قد يكون محظوراً → لا بأس، المستخدم يضغط play يدوياً
-                                }
-                            }["HomePage.useCallback[handleWatchMatch]"]);
-                        } else {
-                            setIsLoadingStream(false);
-                            setHasError(true);
-                            alert(data.error || 'لم يتم العثور على رابط m3u8');
-                        }
+                        const altsParam = match.alternativeUrls && match.alternativeUrls.length > 0 ? `&alts=${encodeURIComponent(match.alternativeUrls.join(','))}` : '';
+                        const streamApiUrl = `http://localhost:3001/api/stream?url=${encodeURIComponent(match.targetSiteUrl)}${altsParam}`;
+                        video.src = streamApiUrl;
+                        video.load();
+                        video.play().catch({
+                            "HomePage.useCallback[handleWatchMatch]": ()=>{
+                            // autoplay قد يكون محظوراً → لا بأس، المستخدم يضغط play يدوياً
+                            }
+                        }["HomePage.useCallback[handleWatchMatch]"]);
                     } catch (err) {
                         setIsLoadingStream(false);
                         setHasError(true);
-                        console.error('Error fetching stream:', err);
+                        console.error('Error setting stream src:', err);
                     }
                 }
             }["HomePage.useCallback[handleWatchMatch]"], 100);
@@ -474,7 +467,7 @@ function HomePage() {
                                 children: "📡"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/page.js",
-                                lineNumber: 258,
+                                lineNumber: 252,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -485,19 +478,19 @@ function HomePage() {
                                         children: "لايف"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/page.js",
-                                        lineNumber: 260,
+                                        lineNumber: 254,
                                         columnNumber: 18
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/page.js",
-                                lineNumber: 259,
+                                lineNumber: 253,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/page.js",
-                        lineNumber: 257,
+                        lineNumber: 251,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -513,7 +506,7 @@ function HomePage() {
                                         "aria-hidden": "true"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/page.js",
-                                        lineNumber: 267,
+                                        lineNumber: 261,
                                         columnNumber: 15
                                     }, this),
                                     liveCount,
@@ -521,7 +514,7 @@ function HomePage() {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/page.js",
-                                lineNumber: 266,
+                                lineNumber: 260,
                                 columnNumber: 13
                             }, this),
                             dataSource === 'fallback' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -532,19 +525,19 @@ function HomePage() {
                                 children: "📦 بيانات تجريبية"
                             }, void 0, false, {
                                 fileName: "[project]/src/app/page.js",
-                                lineNumber: 272,
+                                lineNumber: 266,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/page.js",
-                        lineNumber: 264,
+                        lineNumber: 258,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/page.js",
-                lineNumber: 256,
+                lineNumber: 250,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("main", {
@@ -570,7 +563,7 @@ function HomePage() {
                                                     children: "📺"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 294,
+                                                    lineNumber: 288,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -578,7 +571,7 @@ function HomePage() {
                                                     children: "اختر مباراة لبدء البث"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 295,
+                                                    lineNumber: 289,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -586,13 +579,13 @@ function HomePage() {
                                                     children: "اضغط على «شاهد الآن» بجانب أي مباراة في القائمة الجانبية وسيقوم السيرفر تلقائياً باصطياد إشارة البث."
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 296,
+                                                    lineNumber: 290,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/page.js",
-                                            lineNumber: 293,
+                                            lineNumber: 287,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -609,14 +602,14 @@ function HomePage() {
                                                             className: "spinner-outer"
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/app/page.js",
-                                                            lineNumber: 311,
+                                                            lineNumber: 305,
                                                             columnNumber: 19
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                             className: "spinner-inner"
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/app/page.js",
-                                                            lineNumber: 312,
+                                                            lineNumber: 306,
                                                             columnNumber: 19
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -624,13 +617,13 @@ function HomePage() {
                                                             children: "🎯"
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/app/page.js",
-                                                            lineNumber: 313,
+                                                            lineNumber: 307,
                                                             columnNumber: 19
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 310,
+                                                    lineNumber: 304,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -641,7 +634,7 @@ function HomePage() {
                                                             children: "السيرفر يقنص إشارة البث الآن..."
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/app/page.js",
-                                                            lineNumber: 316,
+                                                            lineNumber: 310,
                                                             columnNumber: 19
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -649,19 +642,19 @@ function HomePage() {
                                                             children: "Puppeteer يفحص الصفحة • FFmpeg جاهز للتحويل"
                                                         }, void 0, false, {
                                                             fileName: "[project]/src/app/page.js",
-                                                            lineNumber: 317,
+                                                            lineNumber: 311,
                                                             columnNumber: 19
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 315,
+                                                    lineNumber: 309,
                                                     columnNumber: 17
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/page.js",
-                                            lineNumber: 304,
+                                            lineNumber: 298,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -674,7 +667,7 @@ function HomePage() {
                                                     children: "📡"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 328,
+                                                    lineNumber: 322,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -682,7 +675,7 @@ function HomePage() {
                                                     children: "تعذّر اصطياد إشارة البث"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 329,
+                                                    lineNumber: 323,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -690,7 +683,7 @@ function HomePage() {
                                                     children: "قد يكون الموقع الخارجي محمياً أو تغيّر هيكله. جرب مباراة أخرى أو حاول مرة ثانية."
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 330,
+                                                    lineNumber: 324,
                                                     columnNumber: 17
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -701,13 +694,13 @@ function HomePage() {
                                                     children: "🔄 إعادة المحاولة"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 334,
+                                                    lineNumber: 328,
                                                     columnNumber: 17
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/page.js",
-                                            lineNumber: 324,
+                                            lineNumber: 318,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("video", {
@@ -725,18 +718,18 @@ function HomePage() {
                                             "aria-label": currentMatch ? `يتم بث مباراة ${currentMatch.homeTeam} ضد ${currentMatch.awayTeam}` : 'مشغل الفيديو'
                                         }, void 0, false, {
                                             fileName: "[project]/src/app/page.js",
-                                            lineNumber: 350,
+                                            lineNumber: 344,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/app/page.js",
-                                    lineNumber: 289,
+                                    lineNumber: 283,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/src/app/page.js",
-                                lineNumber: 288,
+                                lineNumber: 282,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -754,14 +747,14 @@ function HomePage() {
                                                     "aria-hidden": "true"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 385,
+                                                    lineNumber: 379,
                                                     columnNumber: 19
                                                 }, this),
                                                 "بث مباشر"
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/page.js",
-                                            lineNumber: 384,
+                                            lineNumber: 378,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -775,7 +768,7 @@ function HomePage() {
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 389,
+                                                    lineNumber: 383,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -783,13 +776,13 @@ function HomePage() {
                                                     children: currentMatch.competition
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/app/page.js",
-                                                    lineNumber: 392,
+                                                    lineNumber: 386,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/page.js",
-                                            lineNumber: 388,
+                                            lineNumber: 382,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -804,20 +797,20 @@ function HomePage() {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/app/page.js",
-                                            lineNumber: 394,
+                                            lineNumber: 388,
                                             columnNumber: 17
                                         }, this)
                                     ]
                                 }, void 0, true)
                             }, void 0, false, {
                                 fileName: "[project]/src/app/page.js",
-                                lineNumber: 376,
+                                lineNumber: 370,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/page.js",
-                        lineNumber: 285,
+                        lineNumber: 279,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("aside", {
@@ -832,7 +825,7 @@ function HomePage() {
                                         children: "مباريات اليوم"
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/page.js",
-                                        lineNumber: 406,
+                                        lineNumber: 400,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -841,13 +834,13 @@ function HomePage() {
                                         children: arabicDate
                                     }, void 0, false, {
                                         fileName: "[project]/src/app/page.js",
-                                        lineNumber: 408,
+                                        lineNumber: 402,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/page.js",
-                                lineNumber: 405,
+                                lineNumber: 399,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -859,22 +852,22 @@ function HomePage() {
                                         children: [
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(SkeletonCard, {}, void 0, false, {
                                                 fileName: "[project]/src/app/page.js",
-                                                lineNumber: 416,
+                                                lineNumber: 410,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(SkeletonCard, {}, void 0, false, {
                                                 fileName: "[project]/src/app/page.js",
-                                                lineNumber: 417,
+                                                lineNumber: 411,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(SkeletonCard, {}, void 0, false, {
                                                 fileName: "[project]/src/app/page.js",
-                                                lineNumber: 418,
+                                                lineNumber: 412,
                                                 columnNumber: 17
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(SkeletonCard, {}, void 0, false, {
                                                 fileName: "[project]/src/app/page.js",
-                                                lineNumber: 419,
+                                                lineNumber: 413,
                                                 columnNumber: 17
                                             }, this)
                                         ]
@@ -896,14 +889,14 @@ function HomePage() {
                                                 children: scheduleError ? '❌' : '📅'
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/page.js",
-                                                lineNumber: 434,
+                                                lineNumber: 428,
                                                 columnNumber: 17
                                             }, this),
                                             scheduleError ? 'حدث خطأ في جلب المباريات' : 'لا توجد مباريات اليوم'
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/app/page.js",
-                                        lineNumber: 425,
+                                        lineNumber: 419,
                                         columnNumber: 15
                                     }, this),
                                     !loadingMatches && matches.map((match, index)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -917,36 +910,36 @@ function HomePage() {
                                                 onWatch: handleWatchMatch
                                             }, void 0, false, {
                                                 fileName: "[project]/src/app/page.js",
-                                                lineNumber: 447,
+                                                lineNumber: 441,
                                                 columnNumber: 19
                                             }, this)
                                         }, match.id, false, {
                                             fileName: "[project]/src/app/page.js",
-                                            lineNumber: 442,
+                                            lineNumber: 436,
                                             columnNumber: 17
                                         }, this))
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/app/page.js",
-                                lineNumber: 411,
+                                lineNumber: 405,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/app/page.js",
-                        lineNumber: 404,
+                        lineNumber: 398,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/app/page.js",
-                lineNumber: 282,
+                lineNumber: 276,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/app/page.js",
-        lineNumber: 251,
+        lineNumber: 245,
         columnNumber: 5
     }, this);
 }

@@ -13,6 +13,7 @@ const app = express();
 app.use(cors());
 
 let scrapedMatches = [];
+const resolvedStreamsCache = {};
 const MOVIE_TARGETS = [
   // 1. فاصل إعلاني - النسخة البديلة الشغالة طيارة وجدولها محدث
   "https://www.faselhd.top",
@@ -28,6 +29,7 @@ const MOVIE_TARGETS = [
 ];
 const EXPLOIT_TARGETS = [
   "https://koray.live",
+  "https://365kora.net/",
   "https://kora-live.com",
   "https://koralive.online",
   "https://www.yallashoot.video",
@@ -142,6 +144,59 @@ let scrapedMovies = [];
 
 // // Endpoint للأفلام
 // app.get('/api/movies', (req, res) => res.json(scrapedMovies));
+function splitMatchTitle(title) {
+  let clean = title
+    .replace(/مشاهدة مباراة/g, "")
+    .replace(/اليوم \d{1,2}-\d{1,2}-\d{2,4}/g, "")
+    .replace(/قمة ملعب.*/g, "")
+    .replace(/بث مباشر/g, "")
+    .trim();
+
+  let separator = null;
+  if (/[vV]s/i.test(clean)) separator = /[vV]s/i;
+  else if (clean.includes(" 🆚 ")) separator = " 🆚 ";
+  else if (clean.includes(" ضد ")) separator = " ضد ";
+  else if (clean.includes(" و ")) separator = " و ";
+  else if (clean.includes(" و")) separator = " و";
+
+  let teamA = "فريق أ";
+  let teamB = "فريق ب";
+
+  if (separator) {
+    const parts = clean.split(separator);
+    teamA = parts[0] ? parts[0].trim() : "فريق أ";
+    teamB = parts[1] ? parts[1].trim() : "فريق ب";
+
+    if (teamB.startsWith("و")) {
+      teamB = teamB.substring(1).trim();
+    }
+  } else {
+    teamA = clean;
+    teamB = "";
+  }
+
+  if (teamB.includes("في")) teamB = teamB.split("في")[0];
+  if (teamB.includes("ضمن")) teamB = teamB.split("ضمن")[0];
+  teamB = teamB.trim();
+
+  return { teamA, teamB };
+}
+
+function areMatchesSame(m1, m2) {
+  const cleanStr1 = `${m1.teamA} ${m1.teamB}`.replace(/ال/g, '').replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '').trim();
+  const cleanStr2 = `${m2.teamA} ${m2.teamB}`.replace(/ال/g, '').replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '').trim();
+
+  const words1 = `${m1.teamA} ${m1.teamB}`.toLowerCase().split(/[\s🆚]+/).map(w => w.replace(/^ال/, '').trim()).filter(w => w.length > 2);
+  const words2 = `${m2.teamA} ${m2.teamB}`.toLowerCase().split(/[\s🆚]+/).map(w => w.replace(/^ال/, '').trim()).filter(w => w.length > 2);
+  
+  let matches = 0;
+  for (const w of words1) {
+    if (words2.includes(w)) matches++;
+  }
+  
+  return matches >= 2 || (words1.length === 2 && matches >= 1) || cleanStr1.includes(cleanStr2) || cleanStr2.includes(cleanStr1);
+}
+
 async function masterSniffer() {
   console.log("🥷 [Slayer Scraper] بدء عملية الشفط المتوازي والمستقل...");
   let matchesFound = [];
@@ -179,72 +234,59 @@ async function masterSniffer() {
       // الدخول للموقع
       await page.goto(url, { waitUntil: "domcontentloaded" });
       await new Promise((r) => setTimeout(r, 4000)); // وقت لاستقرار الجدول
-// console.log(await page.content());
-     const extractedLinks = await page.evaluate(() => {
-    const items = [];
+      // console.log(await page.content());
+      const extractedLinks = await page.evaluate(() => {
+        const items = [];
 
-    // 1. استهداف حاويات المباريات المخصصة في هذا السورس
-    const matchCards = document.querySelectorAll('.AY_Match');
+        // 1. استهداف حاويات المباريات المخصصة في هذا السورس
+        const matchCards = document.querySelectorAll(".AY_Match");
 
-    if (matchCards.length > 0) {
-        matchCards.forEach(card => {
+        if (matchCards.length > 0) {
+          matchCards.forEach((card) => {
             // قنص الفريق الأول والثاني من الكلاسات المخصصة
-            const teamAEl = card.querySelector('.TM1 .TM_Name');
-            const teamBEl = card.querySelector('.TM2 .TM_Name');
-            
+            const teamAEl = card.querySelector(".TM1 .TM_Name");
+            const teamBEl = card.querySelector(".TM2 .TM_Name");
+
             // قنص رابط البث الشفاف
             const linkEl = card.querySelector('a[href*="/matches/"]');
 
             if (teamAEl && teamBEl && linkEl) {
-                const teamA = teamAEl.innerText.trim();
-                const teamB = teamBEl.innerText.trim();
-                const href = linkEl.href;
+              const teamA = teamAEl.innerText.trim();
+              const teamB = teamBEl.innerText.trim();
+              const href = linkEl.href;
 
-                items.push({
-                    title: `${teamA} 🆚 ${teamB}`,
-                    link: href
-                });
+              items.push({
+                title: `${teamA} 🆚 ${teamB}`,
+                link: href,
+              });
             }
-        });
-    } 
-    
-    // 2. Fallback الكلاسيكي للمواقع التانية لو ملقاش الستركتشر ده
-    if (items.length === 0) {
-        const allLinks = document.querySelectorAll('main a, #content a, .content a');
-        allLinks.forEach(a => {
+          });
+        }
+
+        // 2. Fallback الكلاسيكي للمواقع التانية لو ملقاش الستركتشر ده
+        if (items.length === 0) {
+          const allLinks = document.querySelectorAll("a");
+          allLinks.forEach((a) => {
             const text = (a.innerText || "").trim();
-            if ((text.includes('🆚') || text.includes('ضد') || text.includes('مباراة')) && a.href.startsWith('http')) {
-                items.push({ title: text, link: a.href });
+            if (
+              (text.includes("🆚") ||
+                text.includes("ضد") ||
+                text.includes("مباراة")) &&
+              a.href.startsWith("http")
+            ) {
+              items.push({ title: text, link: a.href });
             }
-        });
-    }
+          });
+        }
 
-    return items;
-});
+        return items;
+      });
 
       if (extractedLinks.length > 0) {
         extractedLinks.forEach((item) => {
-          let cleanTitle = item.title;
-          cleanTitle = cleanTitle
-            .replace(/مشاهدة مباراة/g, "")
-            .replace(/اليوم \d{1,2}-\d{1,2}-\d{2,4}/g, "")
-            .replace(/قمة ملعب.*/g, "")
-            .trim();
-
-          let separator = " و ";
-          if (cleanTitle.includes(" ضد ")) separator = " ضد ";
-          else if (cleanTitle.includes(" 🆚 ")) separator = " 🆚 ";
-
-          const parts = cleanTitle.split(separator);
-          let teamA = parts[0] ? parts[0].trim() : "فريق أ";
-          let teamB = parts[1] ? parts[1].trim() : "فريق ب";
-
-          if (teamB.includes("في")) teamB = teamB.split("في")[0];
-          if (teamB.includes("ضمن")) teamB = teamB.split("ضمن")[0];
-          teamB = teamB.trim();
-
+          const { teamA, teamB } = splitMatchTitle(item.title);
           const isLiveNow =
-            item.link.includes("live") || item.title.includes("الآن");
+            item.link.includes("live") || item.title.includes("الآن") || item.title.includes("مباشر");
 
           matchesFound.push({
             id: `sniff-${Math.random().toString(36).substr(2, 5)}`,
@@ -275,9 +317,30 @@ async function masterSniffer() {
 
   // فلترة وتجميع النهائي
   if (matchesFound.length > 0) {
-    scrapedMatches = Array.from(
-      new Map(matchesFound.map((m) => [`${m.teamA}-${m.teamB}`, m])).values(),
-    );
+    const grouped = [];
+    for (const m of matchesFound) {
+      const existing = grouped.find(g => areMatchesSame(g, m));
+      if (!existing) {
+        grouped.push({
+          id: m.id,
+          teamA: m.teamA,
+          teamB: m.teamB,
+          isLive: m.isLive,
+          time: m.time,
+          targetSiteUrl: m.targetSiteUrl,
+          alternativeUrls: []
+        });
+      } else {
+        if (existing.targetSiteUrl !== m.targetSiteUrl && !existing.alternativeUrls.includes(m.targetSiteUrl)) {
+          existing.alternativeUrls.push(m.targetSiteUrl);
+        }
+        if (m.isLive) {
+          existing.isLive = true;
+          existing.time = "لايف 🔴";
+        }
+      }
+    }
+    scrapedMatches = grouped;
     console.log(
       `📊 إجمالي المباريات المجمعة من كل المواقع معاً: ${scrapedMatches.length}`,
     );
@@ -286,6 +349,103 @@ async function masterSniffer() {
     loadFallback();
   }
 }
+
+function loadFallback() {
+  scrapedMatches = [
+    {
+      id: "sniff-demo1",
+      teamA: "كندا",
+      teamB: "البوسنة والهرسك",
+      isLive: true,
+      time: "لايف 🔴",
+      targetSiteUrl: "https://www.lkora.live/matches/knda-vs-bosna/",
+      alternativeUrls: [
+        "https://www.yallashoot.video/video/canada-vs-bosnia-and-herzegovina-live-stream-12-6-2026/"
+      ]
+    }
+  ];
+}
+
+async function sniffStream(url, page) {
+  if (!url) return null;
+  if (url.includes(".m3u8")) {
+    return { m3u8Url: url, referer: "" };
+  }
+
+  let caught = null;
+  const requestHandler = (r) => {
+    const u = r.url();
+    if (u.includes(".m3u8") && !caught) {
+      console.log(`[Sniffer] Caught .m3u8 URL: ${u}`);
+      caught = {
+        m3u8Url: u,
+        referer: r.headers()["referer"] || ""
+      };
+    }
+  };
+
+  page.on("request", requestHandler);
+
+  try {
+    console.log(`[Sniffer] Loading: ${url}`);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
+    await new Promise(r => setTimeout(r, 4000));
+
+    if (caught) {
+      page.off("request", requestHandler);
+      return caught;
+    }
+
+    // Check for redirection links/hash parameter
+    const redirectUrl = await page.evaluate(() => {
+      const links = Array.from(document.querySelectorAll("a"));
+      let found = links.find(l => l.href.includes("hash="));
+      if (found) return found.href;
+      found = links.find(l => l.innerText.includes("انقر هنا") || l.innerText.includes("المشاهدة") || l.innerText.includes("صفحة المشاهدة"));
+      if (found) return found.href;
+      return null;
+    });
+
+    if (redirectUrl) {
+      console.log(`[Sniffer] Found redirection URL: ${redirectUrl}`);
+      if (redirectUrl.includes("hash=")) {
+        const urlObj = new URL(redirectUrl);
+        const hash = urlObj.searchParams.get("hash");
+        if (hash) {
+          const decoded = Buffer.from(hash.replace(/__/g, '/').replace(/-/g, '+'), 'base64').toString('utf8');
+          const foundUrls = decoded.match(/https?:\/\/[^\s"'`>]+/g);
+          if (foundUrls && foundUrls.length > 0) {
+            console.log(`[Sniffer] Decoded hash player URLs:`, foundUrls);
+            for (const playerUrl of foundUrls) {
+              console.log(`[Sniffer] Trying player URL: ${playerUrl}`);
+              try {
+                await page.goto(playerUrl, { waitUntil: "domcontentloaded", timeout: 12000 });
+                await new Promise(r => setTimeout(r, 5000));
+                if (caught) {
+                  page.off("request", requestHandler);
+                  return caught;
+                }
+              } catch (err) {
+                console.log(`[Sniffer] Error on player ${playerUrl}:`, err.message);
+              }
+            }
+          }
+        }
+      } else {
+        console.log(`[Sniffer] Navigating to redirect page directly: ${redirectUrl}`);
+        await page.goto(redirectUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+        await new Promise(r => setTimeout(r, 5000));
+      }
+    }
+  } catch (err) {
+    console.log(`[Sniffer] Error sniffing URL ${url}:`, err.message);
+  } finally {
+    page.off("request", requestHandler);
+  }
+
+  return caught;
+}
+
 // تشغيل وتكرار العملية كل 15 دقيقة
 masterSniffer();
 setInterval(masterSniffer, 15 * 60 * 1000);
@@ -297,55 +457,111 @@ app.get("/api/stream", async (req, res) => {
   const targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).send("الرابط مطلوب");
 
-  // لو الرابط المارر هو أصلاً سورس بث مباشر جاهز (HLS .m3u8) شغل الـ FFmpeg فوراً
-  if (targetUrl.includes(".m3u8")) {
-    return startFfmpeg(targetUrl, res, req);
+  // Check resolvedStreamsCache first
+  if (resolvedStreamsCache[targetUrl]) {
+    console.log(`[Stream API] Cache HIT for resolved stream:`, resolvedStreamsCache[targetUrl]);
+    const cached = resolvedStreamsCache[targetUrl];
+    return startFfmpeg(cached.m3u8Url, cached.referer, res, req);
   }
 
-  // لو الرابط موقع، يفتح البابيتير ويقنص اللينك المخفي
+  // Check if we have alternatives in scrapedMatches
+  let allUrls = [targetUrl];
+  const matchObj = scrapedMatches.find(m => m.targetSiteUrl === targetUrl);
+  if (matchObj && matchObj.alternativeUrls) {
+    allUrls.push(...matchObj.alternativeUrls);
+  }
+
+  // Also accept from query parameter
+  if (req.query.alts) {
+    const queryAlts = req.query.alts.split(",");
+    for (const alt of queryAlts) {
+      if (alt && !allUrls.includes(alt)) {
+        allUrls.push(alt);
+      }
+    }
+  }
+
+  console.log(`[Stream API] URLs to sniff:`, allUrls);
+
+  // If the first one is an m3u8, play directly
+  if (targetUrl.includes(".m3u8")) {
+    return startFfmpeg(targetUrl, "", res, req);
+  }
+
   const browser = await puppeteer.launch({
     headless: true,
-    args: ["--no-sandbox"],
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-blink-features=AutomationControlled",
+      "--ignore-certificate-errors",
+    ],
   });
   const page = await browser.newPage();
-  let caughtM3u8 = null;
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  );
+  let caught = null;
 
-  await page.setRequestInterception(true);
-  page.on("request", (r) => {
-    if (r.url().includes(".m3u8")) caughtM3u8 = r.url();
-    r.continue();
-  });
-
-  try {
-    await page.goto(targetUrl, { waitUntil: "networkidle2", timeout: 15000 });
-  } catch (e) {}
+  for (const url of allUrls) {
+    caught = await sniffStream(url, page);
+    if (caught) {
+      console.log(`[Stream API] Found working stream:`, caught);
+      break;
+    }
+  }
 
   await browser.close();
 
-  if (caughtM3u8) {
-    startFfmpeg(caughtM3u8, res, req);
+  if (caught) {
+    resolvedStreamsCache[targetUrl] = caught;
+    startFfmpeg(caught.m3u8Url, caught.referer, res, req);
   } else {
     res.status(404).send("لم يتم العثور على إشارة بث حالية");
   }
 });
 
-function startFfmpeg(url, res, req) {
+function getFfmpegPath() {
+  const fs = require("fs");
+  const wingetPath = "C:\\Users\\mazha\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe";
+  if (fs.existsSync(wingetPath)) {
+    return wingetPath;
+  }
+  return "ffmpeg";
+}
+
+function startFfmpeg(url, referer, res, req) {
   res.setHeader("Content-Type", "video/mp4");
-  const ffmpeg = spawn("ffmpeg", [
-    "-i",
-    url,
-    "-c:v",
-    "copy",
-    "-c:a",
-    "copy",
-    "-movflags",
-    "frag_keyframe+empty_moov+faststart",
-    "-f",
-    "mp4",
-    "-",
-  ]);
+  const ffmpegBin = getFfmpegPath();
+
+  const args = [];
+  if (referer) {
+    args.push("-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+    args.push("-referer", referer);
+  }
+
+  args.push("-i", url);
+  args.push(
+    "-c:v", "copy",
+    "-c:a", "copy",
+    "-bsf:a", "aac_adtstoasc",
+    "-movflags", "frag_keyframe+empty_moov+faststart",
+    "-f", "mp4",
+    "-"
+  );
+
+  console.log(`[Stream API] Spawning FFmpeg from: ${ffmpegBin}`);
+  const ffmpeg = spawn(ffmpegBin, args);
+
+  ffmpeg.on("error", (err) => {
+    console.error("[Stream API] FFmpeg process error:", err);
+  });
+
   ffmpeg.stdout.pipe(res);
-  req.on("close", () => ffmpeg.kill());
+  req.on("close", () => {
+    console.log("[Stream API] Client connection closed, killing FFmpeg...");
+    ffmpeg.kill();
+  });
 }
 
 app.listen(3001, () => console.log("🚀 Slayer Scraper Running on Port 3001"));
