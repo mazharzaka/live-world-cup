@@ -20,24 +20,6 @@ const MOVIE_TARGETS = [
   "https://arabseed.show",
   "https://egybest.mx",
 ];
-const EXPLOIT_TARGETS = [
-  "https://koray.live",
-  "https://365kora.net/",
-  "https://kora-live.com",
-  "https://koralive.online",
-  "https://www.yallashoot.video",
-
-  // 2. كورة سيتي الأصلي (جداول ماتشات حية في نص الصفحة)
-  "https://k.kooracity.me",
-  "https://www.lkora.live/",
-  "https://365kora.com/",
-
-  // 3. يلا شوت فور يو (دومين متجدد ونظيف جداً من الإعلانات)
-  "https://www.yalla-shoot-4u.com",
-
-  // 4. كورة ستار (سورس بديل وممتاز للـ Live Matches)
-  "https://www.koora-star.tv",
-];
 
 async function movieSniffer() {
   console.log("🎬 [Movie Scraper] بدء شفط السينما الذكي (بدون كلاسات)...");
@@ -284,7 +266,7 @@ async function masterSniffer() {
   let matchesFound = [];
 
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: false,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -295,13 +277,16 @@ async function masterSniffer() {
   });
 
   const REAL_LIVE_TARGETS = [
-    "https://www.yallashoot.video",
     "https://www.kooracity.com",
     "https://www.yalla-shoot-4u.com",
+    "https://egykoora.com/",
+    "https://live-soccer.tv/",
+    "https://koora-llive.best/",
+    "https://www.freekora.com",
   ];
 
   // اللف على المواقع بفتح صفحات مستقلة تماماً
-  for (let url of EXPLOIT_TARGETS) {
+  for (let url of REAL_LIVE_TARGETS) {
     let page = null;
     try {
       console.log(`🎯 جاري فتح متصفح مستقل لـ: ${url}`);
@@ -330,7 +315,7 @@ async function masterSniffer() {
             const teamBEl = card.querySelector(".TM2 .TM_Name");
 
             // قنص رابط البث الشفاف
-            const linkEl = card.querySelector('a[href*="/matches/"]');
+            const linkEl = card.querySelector("a");
 
             if (teamAEl && teamBEl && linkEl) {
               const teamA = teamAEl.innerText.trim();
@@ -353,7 +338,11 @@ async function masterSniffer() {
             if (
               (text.includes("🆚") ||
                 text.includes("ضد") ||
-                text.includes("مباراة")) &&
+                text.includes("مباراة") ||
+                text.includes("مباشر") ||
+                text.includes("جارية") ||
+                text.includes("الان") ||
+                text.includes("LIVE")) &&
               a.href.startsWith("http")
             ) {
               items.push({ title: text, link: a.href });
@@ -366,18 +355,35 @@ async function masterSniffer() {
 
       if (extractedLinks.length > 0) {
         extractedLinks.forEach((item) => {
-          const { teamA, teamB } = splitMatchTitle(item.title);
+          // تنظيف أحرف الـ HTML
+          const cleanTitle = (item.title || "")
+            .replace(/<\/?[^>]+(>|$)/g, "")
+            .trim();
+
+          const { teamA, teamB } = splitMatchTitle(cleanTitle);
+
+          const linkLower = item.link.toLowerCase();
+          const titleLower = cleanTitle.toLowerCase();
+
+          // لو لقط كلمة "مباشر" أو "الآن" أو أي إشارة للبث، نجبر isLive على true والـ time على "لايف 🔴"
           const isLiveNow =
-            item.link.includes("live") ||
-            item.title.includes("الآن") ||
-            item.title.includes("مباشر");
+            linkLower.includes("live") ||
+            linkLower.includes("watch") ||
+            linkLower.includes("stream") ||
+            titleLower.includes("الآن") ||
+            titleLower.includes("الان") ||
+            titleLower.includes("مباشر") ||
+            titleLower.includes("لايف") ||
+            titleLower.includes("live") ||
+            titleLower.includes("جارية") ||
+            titleLower.includes("جاريه");
 
           matchesFound.push({
             id: `sniff-${Math.random().toString(36).substr(2, 5)}`,
             teamA: teamA,
             teamB: teamB,
             isLive: isLiveNow,
-            time: isLiveNow ? "لايف 🔴" : "قريباً 🕒",
+            time: isLiveNow ? "لايف 🔴" : "بعد قليل 🕒",
             targetSiteUrl: item.link,
           });
         });
@@ -427,9 +433,17 @@ async function masterSniffer() {
         }
       }
     }
+
+    // ترتيب المباريات بحيث يظهر المباشر أولاً ثم بعد قليل
+    grouped.sort((a, b) => {
+      if (a.isLive && !b.isLive) return -1;
+      if (!a.isLive && b.isLive) return 1;
+      return 0;
+    });
+
     scrapedMatches = grouped;
     console.log(
-      `📊 إجمالي المباريات المجمعة من كل المواقع معاً: ${scrapedMatches.length}`,
+      `📊 إجمالي المباريات المجمعة من كل المواقع معاً مرتبة: ${scrapedMatches.length}`,
     );
   } else {
     console.log("🔄 شحن داتا الديمو...");
@@ -449,6 +463,15 @@ function loadFallback() {
       alternativeUrls: [
         "https://www.yallashoot.video/video/canada-vs-bosnia-and-herzegovina-live-stream-12-6-2026/",
       ],
+    },
+    {
+      id: "sniff-demo2",
+      teamA: "مصر",
+      teamB: "السنغال",
+      isLive: false,
+      time: "بعد قليل 🕒",
+      targetSiteUrl: "https://www.lkora.live/matches/egypt-vs-senegal/",
+      alternativeUrls: [],
     },
   ];
 }
@@ -554,9 +577,9 @@ async function sniffStream(url, page) {
 
 // تشغيل وتكرار العملية كل 15 دقيقة
 masterSniffer();
-movieSniffer();
+// movieSniffer();
 setInterval(masterSniffer, 15 * 60 * 1000);
-setInterval(movieSniffer, 15 * 60 * 1000);
+// setInterval(movieSniffer, 15 * 60 * 1000);
 
 // الـ APIs للـ Frontend
 app.get("/api/schedule", (req, res) => res.json(scrapedMatches));
@@ -664,7 +687,7 @@ function startFfmpeg(url, referer, res, req) {
     "-bsf:a",
     "aac_adtstoasc",
     "-movflags",
-    "frag_keyframe+empty_moov+faststart",
+    "frag_keyframe+empty_moov",
     "-f",
     "mp4",
     "-",
@@ -678,7 +701,7 @@ function startFfmpeg(url, referer, res, req) {
   });
 
   ffmpeg.stderr.on("data", (data) => {
-    console.log(`[FFmpeg] ${data.toString().trim()}`);
+    // Consume stderr to avoid process blocking, but do not print/log the progress frames.
   });
 
   ffmpeg.stdout.pipe(res);

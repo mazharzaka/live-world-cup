@@ -545,7 +545,7 @@ function startFfmpeg(url, referer, res, req) {
     "-c:v", "copy",
     "-c:a", "copy",
     "-bsf:a", "aac_adtstoasc",
-    "-movflags", "frag_keyframe+empty_moov+faststart",
+    "-movflags", "frag_keyframe+empty_moov",
     "-f", "mp4",
     "-"
   );
@@ -558,7 +558,7 @@ function startFfmpeg(url, referer, res, req) {
   });
 
   ffmpeg.stderr.on("data", (data) => {
-    console.log(`[FFmpeg] ${data.toString().trim()}`);
+    // Consume stderr to avoid process blocking, but do not print/log the progress frames.
   });
 
   ffmpeg.stdout.pipe(res);
