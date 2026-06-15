@@ -397,7 +397,7 @@ export default function HomePage() {
             📡
           </div>
           <div className="brand-name">
-            كورة <span>لايف</span>
+            ZAKA <span>لايف</span>
           </div>
         </div>
 
