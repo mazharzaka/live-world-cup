@@ -1116,3 +1116,60 @@ body::before {
     font-size: 1.1rem;
   }
 }
+
+/* ─── Servers Selector ──────────────────────────────────────── */
+.servers-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 20px;
+  background: rgba(15, 22, 35, 0.65);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-lg);
+  flex-wrap: wrap;
+}
+
+.servers-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--clr-text-dim);
+}
+
+.servers-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.server-btn {
+  background: var(--clr-surface-2);
+  color: var(--clr-text-dim);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 16px;
+  font-family: "Cairo", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.server-btn:hover {
+  color: #fff;
+  border-color: var(--clr-border-hover);
+  background: var(--clr-surface-3);
+  transform: translateY(-1px);
+}
+
+.server-btn.active {
+  background: linear-gradient(
+    135deg,
+    var(--clr-primary),
+    var(--clr-primary-dim)
+  );
+  color: #fff;
+  border-color: var(--clr-primary);
+  box-shadow: 0 4px 12px var(--clr-primary-glow);
+}
