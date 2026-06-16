@@ -227,26 +227,38 @@ function splitMatchTitle(title) {
   return { teamA, teamB };
 }
 
-function areMatchesSame(m1, m2) {
-  const cleanStr1 = `${m1.teamA} ${m1.teamB}`
+function normalizeArabic(str) {
+  if (!str) return "";
+  return str
+    .toLowerCase()
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/كونجو/g, "كونغو")
     .replace(/ال/g, "")
     .replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "")
     .trim();
-  const cleanStr2 = `${m2.teamA} ${m2.teamB}`
-    .replace(/ال/g, "")
-    .replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "")
-    .trim();
+}
 
-  const words1 = `${m1.teamA} ${m1.teamB}`
-    .toLowerCase()
+function areMatchesSame(m1, m2) {
+  const name1 = `${m1.teamA} ${m1.teamB}`;
+  const name2 = `${m2.teamA} ${m2.teamB}`;
+  
+  const norm1 = normalizeArabic(name1);
+  const norm2 = normalizeArabic(name2);
+
+  if (norm1 === norm2 || norm1.includes(norm2) || norm2.includes(norm1)) {
+    return true;
+  }
+
+  const words1 = name1
     .split(/[\s🆚]+/)
-    .map((w) => w.replace(/^ال/, "").trim())
-    .filter((w) => w.length > 2);
-  const words2 = `${m2.teamA} ${m2.teamB}`
-    .toLowerCase()
+    .map(w => normalizeArabic(w))
+    .filter(w => w.length > 2);
+  const words2 = name2
     .split(/[\s🆚]+/)
-    .map((w) => w.replace(/^ال/, "").trim())
-    .filter((w) => w.length > 2);
+    .map(w => normalizeArabic(w))
+    .filter(w => w.length > 2);
 
   let matches = 0;
   for (const w of words1) {
@@ -255,10 +267,51 @@ function areMatchesSame(m1, m2) {
 
   return (
     matches >= 2 ||
-    (words1.length === 2 && matches >= 1) ||
-    cleanStr1.includes(cleanStr2) ||
-    cleanStr2.includes(cleanStr1)
+    (words1.length === 2 && matches >= 1)
   );
+}
+
+function isValidStreamLink(urlStr, sourceUrl) {
+  if (!urlStr || !urlStr.startsWith("http")) return false;
+  try {
+    const url = new URL(urlStr);
+    const hostname = url.hostname.toLowerCase();
+    const pathname = url.pathname.toLowerCase();
+    
+    // 1. Blacklisted domains (ads, spam blogs, social media)
+    const blockedDomains = [
+      "poiy.online", "fila7lam.com", "blogspot.com", "wordpress.com",
+      "google.com", "facebook.com", "twitter.com", "instagram.com",
+      "telegram.me", "t.me", "whatsapp.com", "youtube.com", "pinterest.com",
+      "doubleclick.net", "adservice", "analytics"
+    ];
+    if (blockedDomains.some(d => hostname.includes(d))) return false;
+    
+    // 2. Blog post patterns (e.g. /2026/06/ or /2025/11/)
+    if (/\/\d{4}\/\d{2}\//.test(pathname)) return false;
+    
+    // 3. Spam/Ad keywords in pathname
+    const spamKeywords = [
+      "scholarship", "insurance", "loan", "credit", "investing",
+      "marketing", "finance", "wealth", "estate", "download",
+      "ads", "click", "privacy-policy", "contact-us", "about-us",
+      "terms-of-service", "terms-and-conditions", "dmca"
+    ];
+    if (spamKeywords.some(kw => pathname.includes(kw))) return false;
+
+    // 4. If it's external, ensure it has match-related keywords or at least doesn't look like generic spam
+    const sourceHost = new URL(sourceUrl).hostname.toLowerCase();
+    if (!hostname.includes(sourceHost.replace("www.", ""))) {
+      // It's an external domain link
+      const sportsKeywords = ["match", "kora", "live", "stream", "shoot", "player", "tv", "bein", "ch", "koora", "yalla"];
+      const hasSportsKw = sportsKeywords.some(kw => hostname.includes(kw) || pathname.includes(kw));
+      if (!hasSportsKw) return false;
+    }
+
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 async function masterSniffer() {
@@ -280,9 +333,10 @@ async function masterSniffer() {
     "https://www.kooracity.com",
     "https://www.yalla-shoot-4u.com",
     "https://egykoora.com/",
-    "https://live-soccer.tv/",
     "https://koora-llive.best/",
     "https://www.freekora.com",
+    "https://www.yallashoot.video",
+    "https://www.lkora.live/",
   ];
 
   // اللف على المواقع بفتح صفحات مستقلة تماماً
@@ -355,6 +409,9 @@ async function masterSniffer() {
 
       if (extractedLinks.length > 0) {
         extractedLinks.forEach((item) => {
+          if (!isValidStreamLink(item.link, url)) {
+            return;
+          }
           // تنظيف أحرف الـ HTML
           const cleanTitle = (item.title || "")
             .replace(/<\/?[^>]+(>|$)/g, "")
@@ -628,6 +685,7 @@ app.get("/api/stream", async (req, res) => {
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-blink-features=AutomationControlled",
+      "--disable-features=IsolateOrigins,site-per-process",
       "--ignore-certificate-errors",
     ],
   });
