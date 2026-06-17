@@ -26,7 +26,7 @@ export default function MoviesPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('https://smfxhlj1-3001.euw.devtunnels.ms/api/movies/english');
+      const response = await fetch('http://localhost:3001/api/movies/english');
       if (!response.ok) {
         throw new Error('فشل جلب البيانات من الخادم');
       }

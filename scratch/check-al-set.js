@@ -1,6 +1,6 @@
 async function checkMovie() {
   try {
-    const res = await fetch("https://smfxhlj1-3001.euw.devtunnels.ms/api/movies/arabic");
+    const res = await fetch("http://localhost:3001/api/movies/arabic");
     const data = await res.json();
     console.log("Total movies found:", data.length);
     data.forEach(m => {

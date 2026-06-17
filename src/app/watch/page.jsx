@@ -67,15 +67,15 @@ function WatchContent() {
   // تحديد الـ API المناسب للبحث عن الفيلم بناءً على الـ ID
   let listApiUrl = "";
   if (id && id.startsWith("englishMovies")) {
-    listApiUrl = "https://smfxhlj1-3001.euw.devtunnels.ms/api/movies/english";
+    listApiUrl = "http://localhost:3001/api/movies/english";
   } else if (id && id.startsWith("arabicMovies")) {
-    listApiUrl = "https://smfxhlj1-3001.euw.devtunnels.ms/api/movies/arabic";
+    listApiUrl = "http://localhost:3001/api/movies/arabic";
   } else if (id && id.startsWith("englishSeries")) {
-    listApiUrl = "https://smfxhlj1-3001.euw.devtunnels.ms/api/series/english";
+    listApiUrl = "http://localhost:3001/api/series/english";
   } else if (id && id.startsWith("arabicSeries")) {
-    listApiUrl = "https://smfxhlj1-3001.euw.devtunnels.ms/api/series/arabic";
+    listApiUrl = "http://localhost:3001/api/series/arabic";
   } else {
-    listApiUrl = "https://smfxhlj1-3001.euw.devtunnels.ms/api/movies/english";
+    listApiUrl = "http://localhost:3001/api/movies/english";
   }
 
   const fetchStreamUrl = async () => {
@@ -111,7 +111,7 @@ function WatchContent() {
       const url = movie.targetUrl; // سيقوم السيرفر بالتنظيف وإلحاق /watch تلقائياً
 
       // 2. جلب سيرفر البث المباشر النظيف باستخدام الـ targetUrl الأصلي
-      const apiUrl = `https://smfxhlj1-3001.euw.devtunnels.ms/api/media/stream?targetUrl=${encodeURIComponent(url)}`;
+      const apiUrl = `http://localhost:3001/api/media/stream?targetUrl=${encodeURIComponent(url)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error("فشل جلب سيرفر البث من الخادم.");

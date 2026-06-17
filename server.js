@@ -84,7 +84,7 @@ async function movieSniffer() {
       type: "direct_menu_site",
       source: "arabsid",
       searchKey: "عرب سيد",
-      fallbackBase: "https://wecima.cx/category/arabic-movies",
+      fallbackBase: "https://vid.mycima.cc/categories-cimawbas.php?cat=5-cimawbas-aflam-3arby",
     },
     // {
     //   type: "google_search",
@@ -130,10 +130,18 @@ async function movieSniffer() {
             }, task.source);
 
             baseUrl = baseUrl || task.fallbackBase;
-            const isCategoryPage = baseUrl.includes("/category/");
+            const isCategoryPage = baseUrl.includes("/category/") || baseUrl.includes("/list/") || baseUrl.includes("categories-cimawbas") || baseUrl.includes("aflam-3arby");
 
-            await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+            await page.goto(baseUrl, { waitUntil: "networkidle2" });
             await new Promise((r) => setTimeout(r, 2000));
+
+            // If we ended up on Google (ISP block/bot detection in Egypt), dynamically fallback to wecima.cc
+            if (page.url().includes("google.com") && baseUrl.includes("wecima.cx")) {
+              console.log("⚠️ تم اكتشاف تحويل وي سيما الأصلي إلى جوجل. جاري الانتقال إلى النطاق البديل wecima.cc...");
+              baseUrl = baseUrl.replace("wecima.cx", "wecima.cc");
+              await page.goto(baseUrl, { waitUntil: "networkidle2" });
+              await new Promise((r) => setTimeout(r, 2000));
+            }
 
             const mappedSections = await page.evaluate(() => {
               const sectionsFound = {};
@@ -147,8 +155,8 @@ async function movieSniffer() {
                 if (
                   !href ||
                   !href.startsWith("http") ||
-                  href === window.location.href ||
-                  (!href.includes("/category/") && !href.includes("/movies/") && !href.includes("/series/"))
+                  (!href.includes("/category/") && !href.includes("/movies/") && !href.includes("/series/") && !href.includes("/list/")) ||
+                  href.includes("egyptian-movies")
                 )
                   return;
 
@@ -178,22 +186,36 @@ async function movieSniffer() {
                   cleanText.includes("لبناني");
 
                 if (hasMovies) {
-                  if (isForeign) sectionsFound["englishMovies"] = href;
-                  else if (isArabic) sectionsFound["arabicMovies"] = href;
+                  if (isForeign) {
+                    if (!sectionsFound["englishMovies"] || href.includes("/list/")) {
+                      sectionsFound["englishMovies"] = href;
+                    }
+                  } else if (isArabic) {
+                    if (!sectionsFound["arabicMovies"] || href.includes("/list/")) {
+                      sectionsFound["arabicMovies"] = href;
+                    }
+                  }
                 } else if (hasSeries) {
-                  if (isForeign) sectionsFound["englishSeries"] = href;
-                  else if (isArabic) sectionsFound["arabicSeries"] = href;
+                  if (isForeign) {
+                    if (!sectionsFound["englishSeries"] || href.includes("/list/")) {
+                      sectionsFound["englishSeries"] = href;
+                    }
+                  } else if (isArabic) {
+                    if (!sectionsFound["arabicSeries"] || href.includes("/list/")) {
+                      sectionsFound["arabicSeries"] = href;
+                    }
+                  }
                 }
               });
               return sectionsFound;
             });
 
             if (isCategoryPage || Object.keys(mappedSections).length === 0) {
-              if (task.fallbackBase.includes("category/arabic-movies") || task.fallbackBase.includes("arabic-movies")) {
+              if (task.fallbackBase.includes("arabic-movies") || task.fallbackBase.includes("egyptian-movies") || task.fallbackBase.includes("aflam-3arby")) {
                 if (!mappedSections["arabicMovies"]) {
                   mappedSections["arabicMovies"] = baseUrl;
                 }
-              } else if (task.fallbackBase.includes("category/arabic-series") || task.fallbackBase.includes("arabic-series")) {
+              } else if (task.fallbackBase.includes("arabic-series")) {
                 if (!mappedSections["arabicSeries"]) {
                   mappedSections["arabicSeries"] = baseUrl;
                 }
@@ -203,68 +225,106 @@ async function movieSniffer() {
             for (let key in mappedSections) {
               const sectionUrl = mappedSections[key];
               console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قشط القسم [${key}] من الرابط: ${sectionUrl}`);
-              await page.goto(sectionUrl, { waitUntil: "domcontentloaded" });
+              
+              let extracted = [];
+              let success = false;
+              let retries = 3;
+              let actualSectionUrl = sectionUrl;
+              while (retries > 0 && !success) {
+                try {
+                  await page.goto(actualSectionUrl, { waitUntil: "networkidle2" });
 
-              await page.evaluate(async () => {
-                window.scrollBy(0, 1000);
-                await new Promise((r) => setTimeout(r, 1500));
-              });
-
-              const extracted = await page.evaluate(() => {
-                const items = [];
-                const cards = document.querySelectorAll(
-                  '.Small--Box, [class*="movie"], [class*="card"], a',
-                );
-
-                cards.forEach((card) => {
-                  let href = card.href || card.querySelector("a")?.href;
-                  if (
-                    !href ||
-                    !href.startsWith("http") ||
-                    href.includes("/category/") ||
-                    href.includes("/actor/") ||
-                    href.includes("/genre/") ||
-                    href.includes("/year/") ||
-                    href.includes("/tag/") ||
-                    href.includes("/tags/") ||
-                    href.includes("rgetUrl") ||
-                    href.includes("url=")
-                  )
-                    return;
-
-                  const imgEl =
-                    card.tagName === "IMG" ? card : card.querySelector("img");
-                  if (!imgEl) return;
-
-                  const posterUrl =
-                    imgEl.getAttribute("data-src") ||
-                    imgEl.getAttribute("data-lazy-src") ||
-                    imgEl.src;
-                  if (
-                    !posterUrl ||
-                    posterUrl.includes("logo") ||
-                    posterUrl.includes("blank") ||
-                    posterUrl.includes("cover.jpg")
-                  )
-                    return;
-
-                  const titleEl =
-                    card.querySelector("h3") || card.querySelector(".title");
-                  const titleText = titleEl
-                    ? titleEl.innerText.trim()
-                    : (imgEl.getAttribute("alt") || "").trim();
-
-                  if (titleText && titleText.length > 2) {
-                    if (!items.some((item) => item.link === href))
-                      items.push({
-                        title: titleText,
-                        poster: posterUrl,
-                        link: href,
-                      });
+                  // If we ended up on Google (ISP block/bot detection in Egypt), dynamically fallback to wecima.cc
+                  if (page.url().includes("google.com") && actualSectionUrl.includes("wecima.cx")) {
+                    console.log("⚠️ تم اكتشاف تحويل رابط القسم إلى جوجل. جاري الانتقال للنطاق البديل wecima.cc...");
+                    actualSectionUrl = actualSectionUrl.replace("wecima.cx", "wecima.cc");
+                    await page.goto(actualSectionUrl, { waitUntil: "networkidle2" });
                   }
-                });
-                return items;
-              });
+
+                  await page.evaluate(async () => {
+                    // Auto Scroll 3000px progressively (6 steps of 500px) to load lazy-loaded elements
+                    for (let i = 0; i < 6; i++) {
+                      window.scrollBy(0, 500);
+                      await new Promise((r) => setTimeout(r, 400));
+                    }
+                  });
+
+                  extracted = await page.evaluate((currentSectionUrl) => {
+                    const items = [];
+                    const cards = document.querySelectorAll(
+                      '[class*="Grid"], [class*="box"], [class*="Box"], .Small--Box, [class*="movie"], [class*="card"], a',
+                    );
+
+                    cards.forEach((card) => {
+                      let href = card.href || card.querySelector("a")?.href;
+                      if (!href || !href.startsWith("http")) return;
+
+                      // Smart filtering: exclude section/category/tag/page/actor/year URLs to prevent capturing them by mistake
+                      const cleanHref = href.toLowerCase().replace(/\/$/, "");
+                      const cleanSection = currentSectionUrl.toLowerCase().replace(/\/$/, "");
+
+                      if (
+                        cleanHref === cleanSection ||
+                        cleanHref.includes("/category/") ||
+                        cleanHref.includes("/genres/") ||
+                        cleanHref.includes("/genre/") ||
+                        cleanHref.includes("/tag/") ||
+                        cleanHref.includes("/tags/") ||
+                        cleanHref.includes("/actor/") ||
+                        cleanHref.includes("/year/") ||
+                        cleanHref.includes("/page/") ||
+                        cleanHref.includes("/section/") ||
+                        cleanHref.includes("/sections/") ||
+                        href.includes("rgetUrl") ||
+                        href.includes("url=")
+                      ) {
+                        return;
+                      }
+
+                      const imgEl =
+                        card.tagName === "IMG" ? card : card.querySelector("img");
+                      if (!imgEl) return;
+
+                      const posterUrl =
+                        imgEl.getAttribute("data-src") ||
+                        imgEl.getAttribute("data-lazy-src") ||
+                        imgEl.src;
+                      if (
+                        !posterUrl ||
+                        posterUrl.includes("logo") ||
+                        posterUrl.includes("blank") ||
+                        posterUrl.includes("cover.jpg")
+                      )
+                        return;
+
+                      const titleEl =
+                        card.querySelector("h3") || card.querySelector(".title");
+                      const titleText = titleEl
+                        ? titleEl.innerText.trim()
+                        : (imgEl.getAttribute("alt") || "").trim();
+
+                      if (titleText && titleText.length > 2) {
+                        if (!items.some((item) => item.link === href))
+                          items.push({
+                            title: titleText,
+                            poster: posterUrl,
+                            link: href,
+                          });
+                      }
+                    });
+                    return items;
+                  }, sectionUrl);
+                  success = true;
+                } catch (err) {
+                  retries--;
+                  console.log(`⚠️ [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] خطأ أثناء قشط القسم [${key}]. محاولات متبقية: ${retries}. الخطأ: ${err.message}`);
+                  if (retries === 0) {
+                    console.log(`❌ فشل قشط القسم [${key}] نهائياً بعد عدة محاولات.`);
+                  } else {
+                    await new Promise((r) => setTimeout(r, 2000));
+                  }
+                }
+              }
 
               extracted.forEach((item) => {
                 let cleanTitle = item.title
@@ -274,14 +334,18 @@ async function movieSniffer() {
                   .replace(/مترجم/g, "")
                   .replace(/اون لاين/g, "")
                   .trim();
+                let targetLink = item.link;
+                if (targetLink.includes("mycima") && targetLink.includes("watch.php")) {
+                  targetLink = targetLink.replace("watch.php", "play.php");
+                }
                 if (
-                  !scrapedData[key].some((el) => el.targetUrl === item.link)
+                  !scrapedData[key].some((el) => el.targetUrl === targetLink)
                 ) {
                   scrapedData[key].push({
                     id: `${key}-${Math.random().toString(36).substr(2, 5)}`,
                     title: cleanTitle,
                     poster: item.poster,
-                    targetUrl: item.link,
+                    targetUrl: targetLink,
                   });
                 }
               });
@@ -578,8 +642,8 @@ async function masterSniffer() {
   }
 }
 // تشغيل وتكرار العملية كل 15 دقيقة
-// masterSniffer();
-// setInterval(masterSniffer, 15 * 60 * 1000);
+masterSniffer();
+setInterval(masterSniffer, 15 * 60 * 1000);
 
 // الـ APIs للـ Frontend
 app.get("/api/schedule", (req, res) => res.json(scrapedMatches));

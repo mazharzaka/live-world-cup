@@ -169,7 +169,7 @@ export default function HomePage() {
     // جلب رابط البث من السيرفر
     setTimeout(async () => {
       try {
-        const streamApiUrl = `https://smfxhlj1-3001.euw.devtunnels.ms/api/stream?url=${encodeURIComponent(match.targetSiteUrl)}`;
+        const streamApiUrl = `http://localhost:3001/api/stream?url=${encodeURIComponent(match.targetSiteUrl)}`;
         const response = await fetch(streamApiUrl);
         const data = await response.json();
 
