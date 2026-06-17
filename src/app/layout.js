@@ -6,12 +6,13 @@
 
 import './globals.css';
 import Providers from './providers';
+import Header from '../components/Header';
 
 export const metadata = {
-  title: '🎬 كورة لايف – منصة البث الرياضي المباشر',
+  title: '🎬 ستريم هنتر – منصة البث المباشر والأفلام',
   description:
-    'شاهد مباريات اليوم مباشرة. منصة بث ذكية تصطاد إشارة البث تلقائيًا وتعرضها في متصفحك.',
-  keywords: 'بث مباشر, مباريات اليوم, كورة لايف, بث رياضي',
+    'شاهد مباريات اليوم والأفلام الأجنبية مباشرة وبدون إعلانات. منصة ذكية لتشغيل البث والأفلام في متصفحك.',
+  keywords: 'بث مباشر, مباريات اليوم, أفلام أجنبية, كورة لايف, بث رياضي',
 };
 
 export default function RootLayout({ children }) {
@@ -30,7 +31,12 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <div className="app-shell">
+            <Header />
+            {children}
+          </div>
+        </Providers>
       </body>
     </html>
   );

@@ -13,260 +13,425 @@ const app = express();
 app.use(cors());
 
 let scrapedMatches = [];
-let scrapedMovies = [];
-const resolvedStreamsCache = {};
 const MOVIE_TARGETS = [
   "https://wecima.show",
   "https://arabseed.show",
   "https://egybest.mx",
+  "https://cima4u.vip",
+  "https://movs4u.tv",
+  "https://lodynet.asia",
+  "https://animelek.me",
+  "https://web.topcinemaa.com/",
+];
+const EXPLOIT_TARGETS = [
+  "https://koray.live",
+  "https://kora-live.com",
+  "https://koralive.online",
+  "https://www.yallashoot.video",
+
+  // 2. كورة سيتي الأصلي (جداول ماتشات حية في نص الصفحة)
+  "https://k.kooracity.me",
+  "https://www.lkora.live/",
+  "https://365kora.com/",
+
+  // 3. يلا شوت فور يو (دومين متجدد ونظيف جداً من الإعلانات)
+  "https://www.yalla-shoot-4u.com",
+
+  // 4. كورة ستار (سورس بديل وممتاز للـ Live Matches)
+  "https://www.koora-star.tv",
 ];
 
+// server.js (إضافة كود قشط الأفلام)
+
+// 🆕 مصفوفات منفصلة لكل تصنيف عشان الفرونت إند يستلمهم على الجاهز
+let scrapedData = {
+  arabicMovies: [],
+  englishMovies: [],
+  arabicSeries: [],
+  englishSeries: [],
+};
 async function movieSniffer() {
-  console.log("🎬 [Movie Scraper] بدء شفط السينما الذكي (بدون كلاسات)...");
-  let moviesFound = [];
+  console.log(
+    "🚀 [⚡ Ultimate Parallel Scraper] تشغيل توب سينما الديناميكي وجوجل المرن للعربي بالتوازي...",
+  );
 
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: false,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-blink-features=AutomationControlled",
-      "--ignore-certificate-errors", // عشان ننسى حوار شهادات الأمان تماماً
-      "--ignore-ssl-errors=yes",
+      "--ignore-certificate-errors",
+      "--window-size=1366,768",
     ],
   });
 
-  for (let url of MOVIE_TARGETS) {
-    let page = null;
-    try {
-      console.log(`🎯 جاري فتح متصفح معزول للأفلام: ${url}`);
-      page = await browser.newPage();
-      await page.setDefaultNavigationTimeout(45000);
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      );
+  scrapedData = {
+    arabicMovies: [],
+    englishMovies: [],
+    arabicSeries: [],
+    englishSeries: [],
+  };
 
-      await page.goto(url, { waitUntil: "domcontentloaded" });
-      await new Promise((r) => setTimeout(r, 5000)); // وقت كاف لفك الـ Lazy Load للبوسترات
+  const tasks = [
+    {
+      type: "direct_menu_site",
+      source: "topcinema",
+      searchKey: "topcinema توب سينما",
+      fallbackBase: "https://web.topcinemaa.com",
+    },
+    {
+      type: "direct_menu_site",
+      source: "arabsid",
+      searchKey: "عرب سيد",
+      fallbackBase: "https://wecima.cx/category/arabic-movies",
+    },
+    // {
+    //   type: "google_search",
+    //   source: "google_arabic",
+    //   queries: {
+    //     arabicMovies: "مشاهدة افلام عربية 2026 اون لاين حصري سينما",
+    //     arabicSeries: "مشاهدة مسلسلات عربية رمضان 2026 اون لاين حصري",
+    //   },
+    // },
+  ];
 
-      const extractedMovies = await page.evaluate(() => {
-        const items = [];
-
-        // 1. هنجيب كل الروابط اللي في الصفحة
-        const allLinks = document.querySelectorAll("a");
-
-        allLinks.forEach((a) => {
-          const href = a.href;
-          if (
-            !href ||
-            !href.startsWith("http") ||
-            href === window.location.href
-          )
-            return;
-
-          // 2. هندور على صورة (بوستر) جوه الرابط أو جوه العنصر الأب مباشرة
-          const imgEl =
-            a.querySelector("img") ||
-            (a.parentElement ? a.parentElement.querySelector("img") : null);
-          if (!imgEl) return; // لو مفيش بوستر يبقى ده مش كارت فيلم!
-
-          // لقط رابط الصورة الذكي (دعم الـ Lazy Loading)
-          const posterUrl =
-            imgEl.getAttribute("data-src") ||
-            imgEl.getAttribute("data-lazy-src") ||
-            imgEl.getAttribute("data-original") ||
-            imgEl.getAttribute("lazy-src") ||
-            imgEl.src;
-
-          if (!posterUrl || !posterUrl.startsWith("http")) return;
-
-          // 3. تجميع النصوص: من الـ Alt ومن الـ innerText ومن الأب
-          const altText = imgEl.getAttribute("alt") || "";
-          const linkText = a.innerText || "";
-          const parentText = a.parentElement ? a.parentElement.innerText : "";
-          const combinedText = `${altText} ${linkText} ${parentText}`
-            .replace(/\s+/g, " ")
-            .trim();
-
-          // 4. الفلترة: هل النص فيه كلمات تدل على ميديا سينمائية؟
-          const isMovieOrSerie =
-            combinedText.includes("فيلم") ||
-            combinedText.includes("مسلسل") ||
-            combinedText.includes("حلقة") ||
-            combinedText.includes("مترجم") ||
-            combinedText.includes("عرض");
-
-          if (isMovieOrSerie && combinedText.length > 5) {
-            if (!items.some((item) => item.link === href)) {
-              items.push({
-                rawTitle: combinedText,
-                poster: posterUrl,
-                link: href,
-              });
-            }
-          }
-        });
-        return items;
-      });
-
-      if (extractedMovies.length > 0) {
-        extractedMovies.forEach((item) => {
-          let text = item.rawTitle;
-
-          // تحديد الجودة أو نوع الميديا ذكياً من النص المدمج
-          let tag = "HD";
-          if (text.includes("1080p")) tag = "1080p 🔥";
-          else if (text.includes("BluRay")) tag = "BluRay 💿";
-          else if (text.includes("مسلسل")) tag = "مسلسل 📺";
-          else if (text.includes("حلقة")) tag = "حلقة 🎞️";
-          else if (text.includes("مترجم")) tag = "مترجم 📝";
-
-          // تنظيف الحشو عشان يتبقى اسم الفيلم/المسلسل شيك وصافي للـ UI
-          let cleanTitle = text
-            .split("مشاهدة")[0]
-            .split("تحميل")[0] // لو مكتوب مشاهدة وتحميل يقطع قبلها
-            .replace(/فيلم/g, "")
-            .replace(/مسلسل/g, "")
-            .replace(/مترجم/g, "")
-            .replace(/اون لاين/g, "")
-            .replace(/بجودة/g, "")
-            .replace(/كامل/g, "")
-            .replace(/\d{4}/g, "") // تشيل السنين
-            .replace(/[-|:|'|"|’|\[\]\(\)\/]/g, "")
-            .replace(/\s+/g, " ")
-            .trim();
-
-          // لو الاسم صغر أوي بسبب التنظيف بناخد أول 4 كلمات
-          if (cleanTitle.length < 3) {
-            cleanTitle = text.split(" ").slice(0, 4).join(" ");
-          }
-
-          moviesFound.push({
-            id: `movie-${Math.random().toString(36).substr(2, 5)}`,
-            title: cleanTitle,
-            tag: tag,
-            poster: item.poster,
-            targetMovieUrl: item.link,
-          });
-        });
-        console.log(
-          `✅ [صيد سينمائي ناجح] لقطنا ${extractedMovies.length} عنوان من: ${url}`,
+  try {
+    await Promise.all(
+      tasks.map(async (task) => {
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1366, height: 768 });
+        await page.setDefaultNavigationTimeout(60000);
+        await page.setUserAgent(
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         );
-      }
-    } catch (err) {
-      console.log(`❌ فشل موقع الأفلام ${url}:`, err.message);
-    } finally {
-      if (page) await page.close();
-    }
-  }
 
-  await browser.close();
+        // 👑 المسار الأول: توب سينما للأجنبي بالمنيو الديناميكي (شغال الله ينور)
+        if (task.type === "direct_menu_site") {
+          try {
+            console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قنص النطاق الحي من جوجل...`);
+            await page.goto(
+              `https://www.google.com/search?q=${encodeURIComponent(task.searchKey)}`,
+              { waitUntil: "domcontentloaded" },
+            );
 
-  if (moviesFound.length > 0) {
-    // منع تكرار الأفلام بناءً على العنوان النظيف
-    scrapedMovies = Array.from(
-      new Map(moviesFound.map((m) => [m.title, m])).values(),
+            let baseUrl = await page.evaluate((key) => {
+              const searchLinks = document.querySelectorAll("#search a");
+              for (let a of searchLinks) {
+                const href = a.href ? a.href.toLowerCase() : "";
+                if (
+                  href &&
+                  (href.includes(key) || href.includes("arabseed") || href.includes("asd")) &&
+                  !href.includes("google")
+                )
+                  return new URL(a.href).origin;
+              }
+              return null;
+            }, task.source);
+
+            baseUrl = baseUrl || task.fallbackBase;
+            const isCategoryPage = baseUrl.includes("/category/");
+
+            await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+            await new Promise((r) => setTimeout(r, 2000));
+
+            const mappedSections = await page.evaluate(() => {
+              const sectionsFound = {};
+              const navLinks = document.querySelectorAll(
+                "nav a, .menu a, header a, ul li a, .navbar a",
+              );
+
+              navLinks.forEach((a) => {
+                const text = a.innerText.toLowerCase().trim();
+                const href = a.href;
+                if (
+                  !href ||
+                  !href.startsWith("http") ||
+                  href === window.location.href ||
+                  (!href.includes("/category/") && !href.includes("/movies/") && !href.includes("/series/"))
+                )
+                  return;
+
+                const cleanText = text
+                  .replace(/أ/g, "ا")
+                  .replace(/إ/g, "ا")
+                  .replace(/آ/g, "ا")
+                  .replace(/ة/g, "ه")
+                  .replace(/ى/g, "ي")
+                  .replace(/ال/g, "");
+
+                const hasMovies =
+                  cleanText.includes("فيلم") || cleanText.includes("افلام");
+                const hasSeries =
+                  cleanText.includes("مسلسل") || cleanText.includes("مسلسلات");
+                const isForeign =
+                  cleanText.includes("اجنبي") ||
+                  cleanText.includes("اجنبيه") ||
+                  cleanText.includes("انقليزي") ||
+                  cleanText.includes("انجليزي");
+                const isArabic =
+                  cleanText.includes("عربي") ||
+                  cleanText.includes("مصرى") ||
+                  cleanText.includes("مصريه") ||
+                  cleanText.includes("خليجي") ||
+                  cleanText.includes("سوري") ||
+                  cleanText.includes("لبناني");
+
+                if (hasMovies) {
+                  if (isForeign) sectionsFound["englishMovies"] = href;
+                  else if (isArabic) sectionsFound["arabicMovies"] = href;
+                } else if (hasSeries) {
+                  if (isForeign) sectionsFound["englishSeries"] = href;
+                  else if (isArabic) sectionsFound["arabicSeries"] = href;
+                }
+              });
+              return sectionsFound;
+            });
+
+            if (isCategoryPage || Object.keys(mappedSections).length === 0) {
+              if (task.fallbackBase.includes("category/arabic-movies") || task.fallbackBase.includes("arabic-movies")) {
+                if (!mappedSections["arabicMovies"]) {
+                  mappedSections["arabicMovies"] = baseUrl;
+                }
+              } else if (task.fallbackBase.includes("category/arabic-series") || task.fallbackBase.includes("arabic-series")) {
+                if (!mappedSections["arabicSeries"]) {
+                  mappedSections["arabicSeries"] = baseUrl;
+                }
+              }
+            }
+
+            for (let key in mappedSections) {
+              const sectionUrl = mappedSections[key];
+              console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قشط القسم [${key}] من الرابط: ${sectionUrl}`);
+              await page.goto(sectionUrl, { waitUntil: "domcontentloaded" });
+
+              await page.evaluate(async () => {
+                window.scrollBy(0, 1000);
+                await new Promise((r) => setTimeout(r, 1500));
+              });
+
+              const extracted = await page.evaluate(() => {
+                const items = [];
+                const cards = document.querySelectorAll(
+                  '.Small--Box, [class*="movie"], [class*="card"], a',
+                );
+
+                cards.forEach((card) => {
+                  let href = card.href || card.querySelector("a")?.href;
+                  if (
+                    !href ||
+                    !href.startsWith("http") ||
+                    href.includes("/category/") ||
+                    href.includes("/actor/") ||
+                    href.includes("/genre/") ||
+                    href.includes("/year/") ||
+                    href.includes("/tag/") ||
+                    href.includes("/tags/") ||
+                    href.includes("rgetUrl") ||
+                    href.includes("url=")
+                  )
+                    return;
+
+                  const imgEl =
+                    card.tagName === "IMG" ? card : card.querySelector("img");
+                  if (!imgEl) return;
+
+                  const posterUrl =
+                    imgEl.getAttribute("data-src") ||
+                    imgEl.getAttribute("data-lazy-src") ||
+                    imgEl.src;
+                  if (
+                    !posterUrl ||
+                    posterUrl.includes("logo") ||
+                    posterUrl.includes("blank") ||
+                    posterUrl.includes("cover.jpg")
+                  )
+                    return;
+
+                  const titleEl =
+                    card.querySelector("h3") || card.querySelector(".title");
+                  const titleText = titleEl
+                    ? titleEl.innerText.trim()
+                    : (imgEl.getAttribute("alt") || "").trim();
+
+                  if (titleText && titleText.length > 2) {
+                    if (!items.some((item) => item.link === href))
+                      items.push({
+                        title: titleText,
+                        poster: posterUrl,
+                        link: href,
+                      });
+                  }
+                });
+                return items;
+              });
+
+              extracted.forEach((item) => {
+                let cleanTitle = item.title
+                  .replace(/مشاهدة/g, "")
+                  .replace(/فيلم/g, "")
+                  .replace(/مسلسل/g, "")
+                  .replace(/مترجم/g, "")
+                  .replace(/اون لاين/g, "")
+                  .trim();
+                if (
+                  !scrapedData[key].some((el) => el.targetUrl === item.link)
+                ) {
+                  scrapedData[key].push({
+                    id: `${key}-${Math.random().toString(36).substr(2, 5)}`,
+                    title: cleanTitle,
+                    poster: item.poster,
+                    targetUrl: item.link,
+                  });
+                }
+              });
+              console.log(
+                `✅ [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] لقطنا ${scrapedData[key].length} عنوان في حقل [${key}]`
+              );
+            }
+          } catch (err) {
+            console.log("❌ فشل في توب سينما:", err.message);
+          } finally {
+            await page.close();
+          }
+        }
+
+        // 👑 المسار الثاني: جوجل المفتوح والمصحح بالكامل للأفلام والمسلسلات العربي
+        if (task.type === "google_search") {
+          try {
+            for (let key in task.queries) {
+              console.log(
+                `🔍 [جوجل عربي] جاري صيد المحتوى العربي عبر البحث عن: [${task.queries[key]}]...`,
+              );
+              await page.goto(
+                `https://www.google.com/search?q=${encodeURIComponent(task.queries[key])}`,
+                { waitUntil: "domcontentloaded" },
+              );
+
+              // 🔥 تصليح الفلترة: قشط نتايج جوجل بدون شروط استبعاد تسبب الأصفار
+              const results = await page.evaluate(() => {
+                const items = [];
+                // لقط روابط البحث العضوية من جوجل الصريحة
+                const searchLinks =
+                  document.querySelectorAll("#search a[jsname]");
+
+                searchLinks.forEach((link) => {
+                  const href = link.href;
+                  const titleEl = link.querySelector("h3");
+                  if (!href || !titleEl) return;
+
+                  // تصفية روابط جوجل الداخلية فقط
+                  if (
+                    href.includes("google.com") ||
+                    href.includes("wikipedia") ||
+                    href.includes("youtube.com")
+                  )
+                    return;
+
+                  let titleText = titleEl.innerText.trim();
+                  // بوستر افتراضي أنيق للمحتوى العربي
+                  const defaultPoster =
+                    "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400";
+
+                  if (titleText && titleText.length > 5) {
+                    // منع التكرار داخل اللفة الحالية
+                    if (!items.some((item) => item.link === href)) {
+                      items.push({
+                        title: titleText,
+                        poster: defaultPoster,
+                        link: href,
+                      });
+                    }
+                  }
+                });
+                return items;
+              });
+
+              results.forEach((item) => {
+                // تنظيف العناوين الطويلة لتظهر كأسماء أفلام شيك في الـ UI
+                let cleanTitle = item.title
+                  .replace(/مشاهدة/g, "")
+                  .replace(/فيلم/g, "")
+                  .replace(/مسلسل/g, "")
+                  .replace(/اون لاين/g, "")
+                  .replace(/HD/g, "")
+                  .replace(/تحميل/g, "")
+                  .replace(/موقع/g, "")
+                  .replace(/حصري/g, "")
+                  .replace(/كامل/g, "")
+                  .split("-")[0]
+                  .split("|")[0]
+                  .trim();
+
+                if (
+                  !scrapedData[key].some((el) => el.targetUrl === item.link)
+                ) {
+                  scrapedData[key].push({
+                    id: `${key}-${Math.random().toString(36).substr(2, 5)}`,
+                    title: cleanTitle,
+                    poster: item.poster,
+                    targetUrl: item.link,
+                  });
+                }
+              });
+              console.log(
+                `✅ [جوجل عربي] لقطنا بنجاح ${scrapedData[key].length} عنوان عربي في حقل [${key}]`,
+              );
+            }
+          } catch (err) {
+            console.log("❌ فشل صيد العربي من جوجل:", err.message);
+          } finally {
+            await page.close();
+          }
+        }
+      }),
     );
+
     console.log(
-      `📊 إجمالي الأفلام والمسلسلات الجاهزة في السيرفر حالا: ${scrapedMovies.length}`,
+      "📊 ⚡ [المعمارية قفلت اللعبة] توب سينما قشط الأجنبي لايف، وجوجل قشط العربي لايف بنجاح توازي تامة!",
     );
-  } else {
-    console.log("🔄 شحن داتا الديمو للأفلام...");
-    scrapedMovies = [
-      {
-        id: "m-d1",
-        title: "Breaking Bad",
-        tag: "مسلسل 📺",
-        poster:
-          "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400",
-        targetMovieUrl: "https://google.com",
-      },
-    ];
+  } catch (err) {
+    console.log(`❌ خطأ عام بالسيرفر:`, err.message);
+  } finally {
+    await browser.close();
   }
 }
 
-// الـ Endpoint الخاص بالأفلام
-app.get("/api/movies", (req, res) => {
-  res.json(scrapedMovies);
+// 4️⃣ رابعاً: تحديث الـ Endpoint عشان ترجع الداتا المتفصصة دي
+// 1. Endpoint الأفلام العربي
+app.get("/api/movies/arabic", (req, res) => {
+  console.log("🎬 [API] طلب قائمة الأفلام العربية...");
+  res.json(scrapedData.arabicMovies);
 });
-function splitMatchTitle(title) {
-  let clean = title
-    .replace(/مشاهدة مباراة/g, "")
-    .replace(/اليوم \d{1,2}-\d{1,2}-\d{2,4}/g, "")
-    .replace(/قمة ملعب.*/g, "")
-    .replace(/بث مباشر/g, "")
-    .trim();
 
-  let separator = null;
-  if (/[vV]s/i.test(clean)) separator = /[vV]s/i;
-  else if (clean.includes(" 🆚 ")) separator = " 🆚 ";
-  else if (clean.includes(" ضد ")) separator = " ضد ";
-  else if (clean.includes(" و ")) separator = " و ";
-  else if (clean.includes(" و")) separator = " و";
+// 2. Endpoint الأفلام الأجنبي
+app.get("/api/movies/english", (req, res) => {
+  console.log("🎬 [API] طلب قائمة الأفلام الأجنبية...");
+  res.json(scrapedData.englishMovies);
+});
 
-  let teamA = "فريق أ";
-  let teamB = "فريق ب";
+// 3. Endpoint المسلسلات العربي
+app.get("/api/series/arabic", (req, res) => {
+  console.log("📺 [API] طلب قائمة المسلسلات العربية...");
+  res.json(scrapedData.arabicSeries);
+});
 
-  if (separator) {
-    const parts = clean.split(separator);
-    teamA = parts[0] ? parts[0].trim() : "فريق أ";
-    teamB = parts[1] ? parts[1].trim() : "فريق ب";
+// 4. Endpoint المسلسلات الأجنبي
+app.get("/api/series/english", (req, res) => {
+  console.log("📺 [API] طلب قائمة المسلسلات الأجنبية...");
+  res.json(scrapedData.englishSeries);
+});
+// تشغيل الفحص فوراً
+movieSniffer();
 
-    if (teamB.startsWith("و")) {
-      teamB = teamB.substring(1).trim();
-    }
-  } else {
-    teamA = clean;
-    teamB = "";
-  }
-
-  if (teamB.includes("في")) teamB = teamB.split("في")[0];
-  if (teamB.includes("ضمن")) teamB = teamB.split("ضمن")[0];
-  teamB = teamB.trim();
-
-  return { teamA, teamB };
-}
-
-function areMatchesSame(m1, m2) {
-  const cleanStr1 = `${m1.teamA} ${m1.teamB}`
-    .replace(/ال/g, "")
-    .replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "")
-    .trim();
-  const cleanStr2 = `${m2.teamA} ${m2.teamB}`
-    .replace(/ال/g, "")
-    .replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "")
-    .trim();
-
-  const words1 = `${m1.teamA} ${m1.teamB}`
-    .toLowerCase()
-    .split(/[\s🆚]+/)
-    .map((w) => w.replace(/^ال/, "").trim())
-    .filter((w) => w.length > 2);
-  const words2 = `${m2.teamA} ${m2.teamB}`
-    .toLowerCase()
-    .split(/[\s🆚]+/)
-    .map((w) => w.replace(/^ال/, "").trim())
-    .filter((w) => w.length > 2);
-
-  let matches = 0;
-  for (const w of words1) {
-    if (words2.includes(w)) matches++;
-  }
-
-  return (
-    matches >= 2 ||
-    (words1.length === 2 && matches >= 1) ||
-    cleanStr1.includes(cleanStr2) ||
-    cleanStr2.includes(cleanStr1)
-  );
-}
-
+// Endpoint للأفلام
+app.get("/api/movies", (req, res) => res.json(scrapedMovies));
 async function masterSniffer() {
   console.log("🥷 [Slayer Scraper] بدء عملية الشفط المتوازي والمستقل...");
   let matchesFound = [];
 
   const browser = await puppeteer.launch({
-    headless: false,
+    headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -277,16 +442,13 @@ async function masterSniffer() {
   });
 
   const REAL_LIVE_TARGETS = [
+    "https://www.yallashoot.video",
     "https://www.kooracity.com",
     "https://www.yalla-shoot-4u.com",
-    "https://egykoora.com/",
-    "https://live-soccer.tv/",
-    "https://koora-llive.best/",
-    "https://www.freekora.com",
   ];
 
   // اللف على المواقع بفتح صفحات مستقلة تماماً
-  for (let url of REAL_LIVE_TARGETS) {
+  for (let url of EXPLOIT_TARGETS) {
     let page = null;
     try {
       console.log(`🎯 جاري فتح متصفح مستقل لـ: ${url}`);
@@ -315,7 +477,7 @@ async function masterSniffer() {
             const teamBEl = card.querySelector(".TM2 .TM_Name");
 
             // قنص رابط البث الشفاف
-            const linkEl = card.querySelector("a");
+            const linkEl = card.querySelector('a[href*="/matches/"]');
 
             if (teamAEl && teamBEl && linkEl) {
               const teamA = teamAEl.innerText.trim();
@@ -332,17 +494,15 @@ async function masterSniffer() {
 
         // 2. Fallback الكلاسيكي للمواقع التانية لو ملقاش الستركتشر ده
         if (items.length === 0) {
-          const allLinks = document.querySelectorAll("a");
+          const allLinks = document.querySelectorAll(
+            "main a, #content a, .content a",
+          );
           allLinks.forEach((a) => {
             const text = (a.innerText || "").trim();
             if (
               (text.includes("🆚") ||
                 text.includes("ضد") ||
-                text.includes("مباراة") ||
-                text.includes("مباشر") ||
-                text.includes("جارية") ||
-                text.includes("الان") ||
-                text.includes("LIVE")) &&
+                text.includes("مباراة")) &&
               a.href.startsWith("http")
             ) {
               items.push({ title: text, link: a.href });
@@ -355,35 +515,34 @@ async function masterSniffer() {
 
       if (extractedLinks.length > 0) {
         extractedLinks.forEach((item) => {
-          // تنظيف أحرف الـ HTML
-          const cleanTitle = (item.title || "")
-            .replace(/<\/?[^>]+(>|$)/g, "")
+          let cleanTitle = item.title;
+          cleanTitle = cleanTitle
+            .replace(/مشاهدة مباراة/g, "")
+            .replace(/اليوم \d{1,2}-\d{1,2}-\d{2,4}/g, "")
+            .replace(/قمة ملعب.*/g, "")
             .trim();
 
-          const { teamA, teamB } = splitMatchTitle(cleanTitle);
+          let separator = " و ";
+          if (cleanTitle.includes(" ضد ")) separator = " ضد ";
+          else if (cleanTitle.includes(" 🆚 ")) separator = " 🆚 ";
 
-          const linkLower = item.link.toLowerCase();
-          const titleLower = cleanTitle.toLowerCase();
+          const parts = cleanTitle.split(separator);
+          let teamA = parts[0] ? parts[0].trim() : "فريق أ";
+          let teamB = parts[1] ? parts[1].trim() : "فريق ب";
 
-          // لو لقط كلمة "مباشر" أو "الآن" أو أي إشارة للبث، نجبر isLive على true والـ time على "لايف 🔴"
+          if (teamB.includes("في")) teamB = teamB.split("في")[0];
+          if (teamB.includes("ضمن")) teamB = teamB.split("ضمن")[0];
+          teamB = teamB.trim();
+
           const isLiveNow =
-            linkLower.includes("live") ||
-            linkLower.includes("watch") ||
-            linkLower.includes("stream") ||
-            titleLower.includes("الآن") ||
-            titleLower.includes("الان") ||
-            titleLower.includes("مباشر") ||
-            titleLower.includes("لايف") ||
-            titleLower.includes("live") ||
-            titleLower.includes("جارية") ||
-            titleLower.includes("جاريه");
+            item.link.includes("live") || item.title.includes("الآن");
 
           matchesFound.push({
             id: `sniff-${Math.random().toString(36).substr(2, 5)}`,
             teamA: teamA,
             teamB: teamB,
             isLive: isLiveNow,
-            time: isLiveNow ? "لايف 🔴" : "بعد قليل 🕒",
+            time: isLiveNow ? "لايف 🔴" : "قريباً 🕒",
             targetSiteUrl: item.link,
           });
         });
@@ -407,308 +566,269 @@ async function masterSniffer() {
 
   // فلترة وتجميع النهائي
   if (matchesFound.length > 0) {
-    const grouped = [];
-    for (const m of matchesFound) {
-      const existing = grouped.find((g) => areMatchesSame(g, m));
-      if (!existing) {
-        grouped.push({
-          id: m.id,
-          teamA: m.teamA,
-          teamB: m.teamB,
-          isLive: m.isLive,
-          time: m.time,
-          targetSiteUrl: m.targetSiteUrl,
-          alternativeUrls: [],
-        });
-      } else {
-        if (
-          existing.targetSiteUrl !== m.targetSiteUrl &&
-          !existing.alternativeUrls.includes(m.targetSiteUrl)
-        ) {
-          existing.alternativeUrls.push(m.targetSiteUrl);
-        }
-        if (m.isLive) {
-          existing.isLive = true;
-          existing.time = "لايف 🔴";
-        }
-      }
-    }
-
-    // ترتيب المباريات بحيث يظهر المباشر أولاً ثم بعد قليل
-    grouped.sort((a, b) => {
-      if (a.isLive && !b.isLive) return -1;
-      if (!a.isLive && b.isLive) return 1;
-      return 0;
-    });
-
-    scrapedMatches = grouped;
+    scrapedMatches = Array.from(
+      new Map(matchesFound.map((m) => [`${m.teamA}-${m.teamB}`, m])).values(),
+    );
     console.log(
-      `📊 إجمالي المباريات المجمعة من كل المواقع معاً مرتبة: ${scrapedMatches.length}`,
+      `📊 إجمالي المباريات المجمعة من كل المواقع معاً: ${scrapedMatches.length}`,
     );
   } else {
     console.log("🔄 شحن داتا الديمو...");
     loadFallback();
   }
 }
-
-function loadFallback() {
-  scrapedMatches = [
-    {
-      id: "sniff-demo1",
-      teamA: "كندا",
-      teamB: "البوسنة والهرسك",
-      isLive: true,
-      time: "لايف 🔴",
-      targetSiteUrl: "https://www.lkora.live/matches/knda-vs-bosna/",
-      alternativeUrls: [
-        "https://www.yallashoot.video/video/canada-vs-bosnia-and-herzegovina-live-stream-12-6-2026/",
-      ],
-    },
-    {
-      id: "sniff-demo2",
-      teamA: "مصر",
-      teamB: "السنغال",
-      isLive: false,
-      time: "بعد قليل 🕒",
-      targetSiteUrl: "https://www.lkora.live/matches/egypt-vs-senegal/",
-      alternativeUrls: [],
-    },
-  ];
-}
-
-async function sniffStream(url, page) {
-  if (!url) return null;
-  if (url.includes(".m3u8")) {
-    return { m3u8Url: url, referer: "" };
-  }
-
-  let caught = null;
-  const requestHandler = (r) => {
-    const u = r.url();
-    if (u.includes(".m3u8") && !caught) {
-      console.log(`[Sniffer] Caught .m3u8 URL: ${u}`);
-      caught = {
-        m3u8Url: u,
-        referer: r.headers()["referer"] || "",
-      };
-    }
-  };
-
-  page.on("request", requestHandler);
-
-  try {
-    console.log(`[Sniffer] Loading: ${url}`);
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
-    await new Promise((r) => setTimeout(r, 4000));
-
-    if (caught) {
-      page.off("request", requestHandler);
-      return caught;
-    }
-
-    // Check for redirection links/hash parameter
-    const redirectUrl = await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll("a"));
-      let found = links.find((l) => l.href.includes("hash="));
-      if (found) return found.href;
-      found = links.find(
-        (l) =>
-          l.innerText.includes("انقر هنا") ||
-          l.innerText.includes("المشاهدة") ||
-          l.innerText.includes("صفحة المشاهدة"),
-      );
-      if (found) return found.href;
-      return null;
-    });
-
-    if (redirectUrl) {
-      console.log(`[Sniffer] Found redirection URL: ${redirectUrl}`);
-      if (redirectUrl.includes("hash=")) {
-        const urlObj = new URL(redirectUrl);
-        const hash = urlObj.searchParams.get("hash");
-        if (hash) {
-          const decoded = Buffer.from(
-            hash.replace(/__/g, "/").replace(/-/g, "+"),
-            "base64",
-          ).toString("utf8");
-          const foundUrls = decoded.match(/https?:\/\/[^\s"'`>]+/g);
-          if (foundUrls && foundUrls.length > 0) {
-            console.log(`[Sniffer] Decoded hash player URLs:`, foundUrls);
-            for (const playerUrl of foundUrls) {
-              console.log(`[Sniffer] Trying player URL: ${playerUrl}`);
-              try {
-                await page.goto(playerUrl, {
-                  waitUntil: "domcontentloaded",
-                  timeout: 12000,
-                });
-                await new Promise((r) => setTimeout(r, 5000));
-                if (caught) {
-                  page.off("request", requestHandler);
-                  return caught;
-                }
-              } catch (err) {
-                console.log(
-                  `[Sniffer] Error on player ${playerUrl}:`,
-                  err.message,
-                );
-              }
-            }
-          }
-        }
-      } else {
-        console.log(
-          `[Sniffer] Navigating to redirect page directly: ${redirectUrl}`,
-        );
-        await page.goto(redirectUrl, {
-          waitUntil: "domcontentloaded",
-          timeout: 15000,
-        });
-        await new Promise((r) => setTimeout(r, 5000));
-      }
-    }
-  } catch (err) {
-    console.log(`[Sniffer] Error sniffing URL ${url}:`, err.message);
-  } finally {
-    page.off("request", requestHandler);
-  }
-
-  return caught;
-}
-
 // تشغيل وتكرار العملية كل 15 دقيقة
-masterSniffer();
-// movieSniffer();
-setInterval(masterSniffer, 15 * 60 * 1000);
-// setInterval(movieSniffer, 15 * 60 * 1000);
+// masterSniffer();
+// setInterval(masterSniffer, 15 * 60 * 1000);
 
 // الـ APIs للـ Frontend
 app.get("/api/schedule", (req, res) => res.json(scrapedMatches));
 
+// تنظيف وتصحيح رابط المشاهدة لسينما وتجنب //watch
+function cleanMovieUrl(url) {
+  if (!url) return url;
+  let clean = url;
+  if (clean.includes("rgetUrl=")) {
+    clean = decodeURIComponent(clean.split("rgetUrl=")[1]);
+  }
+  if (clean.includes("topcinema")) {
+    // إزالة أي لاحقة watch أو /watch مكررة في النهاية
+    clean = clean.replace(/\/+watch\/?$/, "");
+    // إضافة /watch بشكل صحيح ونظيف
+    clean = clean.endsWith("/") ? clean + "watch" : clean + "/watch";
+  } else if (clean.includes("asd.ink") || clean.includes("arabseed")) {
+    // إزالة أي لاحقة watch أو /watch مكررة في النهاية
+    clean = clean.replace(/\/+watch\/?$/, "");
+    // إضافة /watch/ بشكل صحيح ونظيف للأفلام العربية
+    clean = clean.endsWith("/") ? clean + "watch/" : clean + "/watch/";
+  }
+  return clean;
+}
+
+// 1. Endpoint البث المباشر (FFmpeg streaming) للمباريات والأفلام (إذا أراد المستخدم تشغيل الفيديو مباشرة)
 app.get("/api/stream", async (req, res) => {
-  const targetUrl = req.query.url;
+  let targetUrl = req.query.url || req.query.targetUrl;
   if (!targetUrl) return res.status(400).send("الرابط مطلوب");
 
-  // Check resolvedStreamsCache first
-  if (resolvedStreamsCache[targetUrl]) {
-    console.log(
-      `[Stream API] Cache HIT for resolved stream:`,
-      resolvedStreamsCache[targetUrl],
-    );
-    const cached = resolvedStreamsCache[targetUrl];
-    return startFfmpeg(cached.m3u8Url, cached.referer, res, req);
-  }
+  targetUrl = cleanMovieUrl(targetUrl);
 
-  // Check if we have alternatives in scrapedMatches
-  let allUrls = [targetUrl];
-  const matchObj = scrapedMatches.find((m) => m.targetSiteUrl === targetUrl);
-  if (matchObj && matchObj.alternativeUrls) {
-    allUrls.push(...matchObj.alternativeUrls);
-  }
+  console.log(`📡 [Direct Stream] جاري تشغيل البث لـ: ${targetUrl}`);
 
-  // Also accept from query parameter
-  if (req.query.alts) {
-    const queryAlts = req.query.alts.split(",");
-    for (const alt of queryAlts) {
-      if (alt && !allUrls.includes(alt)) {
-        allUrls.push(alt);
-      }
-    }
-  }
-
-  console.log(`[Stream API] URLs to sniff:`, allUrls);
-
-  // If the first one is an m3u8, play directly
+  // لو الرابط المارر هو أصلاً سورس بث مباشر جاهز (HLS .m3u8) شغل الـ FFmpeg فوراً
   if (targetUrl.includes(".m3u8")) {
-    return startFfmpeg(targetUrl, "", res, req);
+    return startFfmpeg(targetUrl, res, req);
   }
 
+  // لو الرابط موقع، يفتح البابيتير ويقنص اللينك المخفي
   const browser = await puppeteer.launch({
     headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-blink-features=AutomationControlled",
-      "--ignore-certificate-errors",
-    ],
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
   const page = await browser.newPage();
-  await page.setUserAgent(
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-  );
-  let caught = null;
 
-  for (const url of allUrls) {
-    caught = await sniffStream(url, page);
-    if (caught) {
-      console.log(`[Stream API] Found working stream:`, caught);
-      break;
+  let caughtM3u8 = null;
+  let resolveStream;
+  const streamPromise = new Promise((resolve) => {
+    resolveStream = resolve;
+  });
+
+  await page.setRequestInterception(true);
+  page.on("request", (r) => {
+    const reqUrl = r.url();
+    if ((reqUrl.includes(".m3u8") || reqUrl.includes(".mp4")) && !caughtM3u8) {
+      caughtM3u8 = reqUrl;
+      resolveStream(reqUrl);
     }
+    r.continue();
+  });
+
+  try {
+    // سباق بين تحميل الصفحة، التقاط الـ m3u8، أو مهلة 6 ثوانٍ كحد أقصى للإنهاء الفوري
+    await Promise.race([
+      page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 10000 }),
+      streamPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 6000))
+    ]);
+  } catch (e) {
+    console.log(`ℹ️ [Direct Stream] انتهت مهلة القنص المبكرة للـ HLS: ${e.message}`);
   }
 
   await browser.close();
 
-  if (caught) {
-    resolvedStreamsCache[targetUrl] = caught;
-    startFfmpeg(caught.m3u8Url, caught.referer, res, req);
+  if (caughtM3u8) {
+    console.log(`🎯 [Direct Stream] تم قنص m3u8 والبدء بـ FFmpeg: ${caughtM3u8}`);
+    startFfmpeg(caughtM3u8, res, req);
   } else {
     res.status(404).send("لم يتم العثور على إشارة بث حالية");
   }
 });
 
-function getFfmpegPath() {
-  const fs = require("fs");
-  const wingetPath =
-    "C:\\Users\\mazha\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin\\ffmpeg.exe";
-  if (fs.existsSync(wingetPath)) {
-    return wingetPath;
-  }
-  return "ffmpeg";
-}
+// 2. Endpoint مشغل الأفلام النظيف (JSON metadata) لعنصر الـ iframe في الفرونت إند
+app.get("/api/media/stream", async (req, res) => {
+  let targetUrl = req.query.targetUrl || req.query.url;
+  if (!targetUrl) return res.status(400).json({ error: "الرابط مطلوب" });
 
-function startFfmpeg(url, referer, res, req) {
+  targetUrl = cleanMovieUrl(targetUrl);
+  console.log(`🎬 [Media Stream API] جاري قنص رابط البث لـ: ${targetUrl}`);
+
+  const browser = await puppeteer.launch({
+    headless: false, // سيبها false عشان تراقب المتصفح وهو بيفك الحماية ويضغط بنفسه
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--ignore-certificate-errors'
+    ],
+  });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1366, height: 768 });
+  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+
+  let caughtStream = null;
+  let fallbackEmbedUrl = null;
+  let resolveStream;
+  const streamPromise = new Promise((resolve) => {
+    resolveStream = resolve;
+  });
+
+  // 🔥 تصليح 1: نظام الـ if-else المقفل بإحكام مع فحص مرن للرابط الرئيسي
+  await page.setRequestInterception(true);
+  page.on("request", (r) => {
+    const reqUrl = r.url().toLowerCase();
+    const cleanTarget = targetUrl.toLowerCase().replace("://m.", "://"); // إزالة m. للمقارنة المرنة
+
+    // تكة الأمان: لو الطلب ده هو الصفحة الرئيسية أو تحويلاتها، عّديه فوراً بدون فلاتر
+    if (reqUrl.includes(cleanTarget) && (r.resourceType() === 'document' || r.resourceType() === 'navigation')) {
+      r.continue();
+      return;
+    }
+
+    // حظر الإعلانات الشرسة فقط اللي بتعمل بوب اب وشلل
+    if (
+      reqUrl.includes("popads") ||
+      reqUrl.includes("adsterra") ||
+      reqUrl.includes("analytics") ||
+      reqUrl.includes("doubleclick") ||
+      reqUrl.includes("onclick") ||
+      reqUrl.includes("exoclick")
+    ) {
+      r.abort();
+    }
+    else {
+      // التقاط الـ m3u8 أو mp4 أو ts لايف من الشبكة
+      if ((reqUrl.includes(".m3u8") || reqUrl.includes(".mp4") || reqUrl.includes(".ts")) && !caughtStream) {
+        if (!reqUrl.includes("google") && !reqUrl.includes("facebook")) {
+          caughtStream = r.url();
+          resolveStream(caughtStream);
+        }
+      }
+      r.continue();
+    }
+  });
+
+  // 1. محاولة تحميل الصفحة الأب
+  try {
+    await Promise.race([
+      // 🔥 تصليح 2: استبدال commit بـ domcontentloaded (القيمة الرسمية الصحيحة والسريعة)
+      page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 15000 }),
+      streamPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000))
+    ]);
+  } catch (e) {
+    console.log(`ℹ️ [Media Stream API] انتهت مهلة قنص الصفحة الرئيسية (متوقع): ${e.message}`);
+  }
+
+  // 2. تكتيك الفرز والضغط الذكي (عرب سيد + سينما فور اب)
+  if (!caughtStream) {
+    try {
+      // فحص لو الـ iframe مش ظاهر في أول لقطة (حالة عرب سيد وعمليات الـ Defer)
+      const hasIframe = await page.$("iframe");
+      if (!hasIframe) {
+        console.log(`⚙️ [تكتيك عرب سيد] الـ iframe مختفي، جاري محاكاة الضغط على قائمة السيرفرات...`);
+        await page.evaluate(() => {
+          // استهداف أزرار سيرفرات التشغيل في عرب سيد، سينما فور اب، وماي سيما
+          const serverButtons = document.querySelectorAll(".servers-list li, .serversNav li, [class*=\"server\"] li, .watch-servers a, .ServersList a");
+          if (serverButtons.length > 0) {
+            serverButtons[0].click(); // اضغط على أول سيرفر متاح لتوليد الـ iframe ديناميكياً
+          }
+        });
+        await new Promise((r) => setTimeout(r, 3000)); // انتظار 3 ثوانٍ كاملة لفرش الـ DOM الجديد وتوليد الـ iframe
+      }
+
+      // لقط الـ Embed URL من الـ iframe المكتشف أو المتولد
+      await page.waitForSelector("iframe", { timeout: 5000 });
+      const embedUrl = await page.evaluate(() => {
+        const iframes = Array.from(document.querySelectorAll("iframe"));
+        for (let iframe of iframes) {
+          const src = iframe.src || iframe.getAttribute("data-src") || iframe.getAttribute("data-lazy-src");
+          if (src && (src.includes("embed") || src.includes("player") || src.includes("vidtube") || src.includes("asd") || src.includes("arabseed"))) {
+            return src;
+          }
+        }
+        return null;
+      });
+
+      if (embedUrl) {
+        fallbackEmbedUrl = embedUrl;
+        console.log(`📡 [Media Stream API] تم العثور على مشغل خارجي: ${embedUrl}. جاري الاختراق العميق...`);
+
+        // 🔥 تصليح 3: تعديل الـ waitUntil هنا أيضاً لـ domcontentloaded
+        await page.goto(embedUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+        await new Promise((r) => setTimeout(r, 2000));
+
+        // كليك ذكي جوه الـ Embed لتنشيط حزم الـ mp4/m3u8 المستهبلة في الشبكة
+        if (!caughtStream) {
+          console.log("🖱️ [Media Stream API] جاري عمل Click داخل المشغل لتفجير الـ Network Requests...");
+          await page.mouse.click(680, 400);
+        }
+
+        await Promise.race([
+          streamPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout inside embed")), 6000))
+        ]);
+      }
+    } catch (err) {
+      console.log(`ℹ️ [Media Stream API] فشل القنص العميق داخل المشغل: ${err.message}`);
+    }
+  }
+
+  // 3. الإغلاق والإنقاذ
+  await browser.close();
+
+  if (!caughtStream && fallbackEmbedUrl) {
+    caughtStream = fallbackEmbedUrl;
+  }
+
+  console.log("💎 الرابط النهائي المستخرج:", caughtStream);
+
+  if (caughtStream) {
+    console.log(`🎯 [Media Stream API] نجاح قنص الرابط: ${caughtStream}`);
+    const isDirect = caughtStream.includes(".m3u8") || caughtStream.includes(".mp4") || caughtStream.includes(".ts");
+    const type = isDirect ? "direct" : "iframe";
+    res.json({ streamUrl: caughtStream, type });
+  } else {
+    console.log(`❌ [Media Stream API] لم يتم العثور على رابط بث`);
+    res.status(404).json({ error: "لم يتم العثور على رابط بث نظيف حالياً" });
+  }
+});
+function startFfmpeg(url, res, req) {
   res.setHeader("Content-Type", "video/mp4");
-  const ffmpegBin = getFfmpegPath();
-
-  const args = [];
-  if (referer) {
-    args.push(
-      "-user_agent",
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    );
-    args.push("-referer", referer);
-  }
-
-  args.push("-i", url);
-  args.push(
+  const ffmpeg = spawn("ffmpeg", [
+    "-i",
+    url,
     "-c:v",
     "copy",
     "-c:a",
     "copy",
-    "-bsf:a",
-    "aac_adtstoasc",
     "-movflags",
-    "frag_keyframe+empty_moov",
+    "frag_keyframe+empty_moov+faststart",
     "-f",
     "mp4",
     "-",
-  );
-
-  console.log(`[Stream API] Spawning FFmpeg from: ${ffmpegBin}`);
-  const ffmpeg = spawn(ffmpegBin, args);
-
-  ffmpeg.on("error", (err) => {
-    console.error("[Stream API] FFmpeg process error:", err);
-  });
-
-  ffmpeg.stderr.on("data", (data) => {
-    // Consume stderr to avoid process blocking, but do not print/log the progress frames.
-  });
-
+  ]);
   ffmpeg.stdout.pipe(res);
-  req.on("close", () => {
-    console.log("[Stream API] Client connection closed, killing FFmpeg...");
-    ffmpeg.kill();
-  });
+  req.on("close", () => ffmpeg.kill());
 }
 
 app.listen(3001, () => console.log("🚀 Slayer Scraper Running on Port 3001"));
