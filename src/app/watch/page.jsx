@@ -14,7 +14,7 @@ function DirectVideoPlayer({ src }) {
 
     let hls;
     const initPlayer = async () => {
-      if (src.includes(".m3u8")) {
+      if (src.includes(".m3u8") || src.includes("urlset")) {
         const Hls = (await import("hls.js")).default;
         if (Hls.isSupported()) {
           hls = new Hls();
@@ -38,17 +38,21 @@ function DirectVideoPlayer({ src }) {
   }, [src]);
 
   return (
- <iframe 
-        src={src} // الرابط الصافي الخارجي (مثل vidtube) مباشرة بدون بروكسي
-        className="w-full h-full" 
-        allowFullScreen 
-        allow="autoplay; encrypted-media"
-        
-        // 🕶️ التوليفة السحرية لكسر حماية المتصفح ومنع الإعلانات معاً:
-        // أضفنا allow-top-navigation-by-user-activation عشان الـ iframe يشتغل لو طلب التوثيق، 
-        // وشيلنا allow-popups ميتة ونور فمستحيل يفتح إعلان بره الصفحة!
-        sandbox="allow-scripts allow-same-origin allow-forms allow-top-navigation-by-user-activation" 
-      />
+    <video
+      ref={videoRef}
+      controls
+      autoPlay
+      className="w-full h-full aspect-video rounded-xl shadow-2xl video-shell"
+      style={{
+        width: "100%",
+        height: "100%",
+        border: "none",
+        borderRadius: "var(--radius-xl)",
+        backgroundColor: "#000",
+      }}
+      referrerPolicy="no-referrer"
+      crossOrigin="anonymous"
+    />
   );
 }
 
@@ -208,7 +212,7 @@ function WatchContent() {
         )}
 
         {/* مشغل الفيديو المباشر HLS/MP4 */}
-        {!isLoading && !error && streamUrl && streamType === "direct" && (
+        {!isLoading && !error && streamUrl && (streamType === "direct" || streamType === "hls") && (
           <DirectVideoPlayer src={streamUrl} />
         )}
       </div>

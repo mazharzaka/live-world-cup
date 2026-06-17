@@ -868,8 +868,12 @@ app.get("/api/media/stream", async (req, res) => {
 
   if (caughtStream) {
     console.log(`🎯 [Media Stream API] نجاح قنص الرابط: ${caughtStream}`);
-    const isDirect = caughtStream.includes(".m3u8") || caughtStream.includes(".mp4") || caughtStream.includes(".ts");
-    const type = isDirect ? "direct" : "iframe";
+    let type = "iframe";
+    if (caughtStream.includes(".m3u8") || caughtStream.includes("urlset")) {
+      type = "hls";
+    } else if (caughtStream.includes(".mp4") || caughtStream.includes(".ts")) {
+      type = "direct";
+    }
     res.json({ streamUrl: caughtStream, type });
   } else {
     console.log(`❌ [Media Stream API] لم يتم العثور على رابط بث`);

@@ -118,6 +118,13 @@ body::before {
   min-height: 100vh;
 }
 
+.video-shell {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* ─── Header / Navbar ───────────────────────────────────────── */
 .navbar {
   display: flex;
