@@ -13,6 +13,72 @@ const app = express();
 app.use(cors());
 
 let scrapedMatches = [];
+let scrapedMovies = [];
+const resolvedStreamsCache = {};
+
+function splitMatchTitle(title) {
+  let clean = title
+    .replace(/مشاهدة مباراة/g, "")
+    .replace(/اليوم \d{1,2}-\d{1,2}-\d{2,4}/g, "")
+    .replace(/قمة ملعب.*/g, "")
+    .replace(/بث مباشر/g, "")
+    .trim();
+
+  let separator = null;
+  if (/[vV]s/i.test(clean)) separator = /[vV]s/i;
+  else if (clean.includes(" 🆚 ")) separator = " 🆚 ";
+  else if (clean.includes(" ضد ")) separator = " ضد ";
+  else if (clean.includes(" و ")) separator = " و ";
+  else if (clean.includes(" و")) separator = " و";
+
+  let teamA = "فريق أ";
+  let teamB = "فريق ب";
+
+  if (separator) {
+    const parts = clean.split(separator);
+    teamA = parts[0] ? parts[0].trim() : "فريق أ";
+    teamB = parts[1] ? parts[1].trim() : "فريق ب";
+
+    if (teamB.startsWith("و")) {
+      teamB = teamB.substring(1).trim();
+    }
+  } else {
+    teamA = clean;
+    teamB = "";
+  }
+
+  if (teamB.includes("في")) teamB = teamB.split("في")[0];
+  if (teamB.includes("ضمن")) teamB = teamB.split("ضمن")[0];
+  teamB = teamB.trim();
+
+  return { teamA, teamB };
+}
+
+function areMatchesSame(m1, m2) {
+  const cleanStr1 = `${m1.teamA} ${m1.teamB}`.replace(/ال/g, '').replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '').trim();
+  const cleanStr2 = `${m2.teamA} ${m2.teamB}`.replace(/ال/g, '').replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '').trim();
+
+  const words1 = `${m1.teamA} ${m1.teamB}`.toLowerCase().split(/[\s🆚]+/).map(w => w.replace(/^ال/, '').trim()).filter(w => w.length > 2);
+  const words2 = `${m2.teamA} ${m2.teamB}`.toLowerCase().split(/[\s🆚]+/).map(w => w.replace(/^ال/, '').trim()).filter(w => w.length > 2);
+  
+  let matches = 0;
+  for (const w of words1) {
+    if (words2.includes(w)) matches++;
+  }
+  
+  return matches >= 2 || (words1.length === 2 && matches >= 1) || cleanStr1.includes(cleanStr2) || cleanStr2.includes(cleanStr1);
+}
+
+function getFfmpegPath() {
+  const fs = require("fs");
+  const path = require("path");
+  const userProfile = process.env.USERPROFILE || "C:\\Users\\mazharm";
+  const wingetPath = path.join(userProfile, "AppData", "Local", "Microsoft", "WinGet", "Packages", "Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe", "ffmpeg-8.1.1-full_build", "bin", "ffmpeg.exe");
+  if (fs.existsSync(wingetPath)) {
+    return wingetPath;
+  }
+  return "ffmpeg";
+}
 const MOVIE_TARGETS = [
   "https://wecima.show",
   "https://arabseed.show",
@@ -23,24 +89,36 @@ const MOVIE_TARGETS = [
   "https://animelek.me",
   "https://web.topcinemaa.com/",
 ];
-const EXPLOIT_TARGETS = [
-  "https://koray.live",
-  "https://kora-live.com",
-  "https://koralive.online",
-  "https://www.yallashoot.video",
 
-  // 2. كورة سيتي الأصلي (جداول ماتشات حية في نص الصفحة)
-  "https://k.kooracity.me",
-  "https://www.lkora.live/",
-  "https://365kora.com/",
+async function movieSniffer() {
+  console.log("🎬 [Movie Scraper] بدء شفط السينما الذكي (بدون كلاسات)...");
+  let moviesFound = [];
 
-  // 3. يلا شوت فور يو (دومين متجدد ونظيف جداً من الإعلانات)
-  "https://www.yalla-shoot-4u.com",
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-blink-features=AutomationControlled",
+      "--ignore-certificate-errors", // عشان ننسى حوار شهادات الأمان تماماً
+      "--ignore-ssl-errors=yes",
+    ],
+  });
 
-  // 4. كورة ستار (سورس بديل وممتاز للـ Live Matches)
-  "https://www.koora-star.tv",
-];
-
+  for (let url of MOVIE_TARGETS) {
+    let page = null;
+    try {
+      console.log(`🎯 جاري فتح متصفح معزول للأفلام: ${url}`);
+      page = await browser.newPage();
+      await page.setDefaultNavigationTimeout(45000);
+      await page.setUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      );
+    } catch (error) {
+      console.error(`❌ [${url}] خطأ في فتح الصفحة:`, error);
+    }
+  }
+}
 // server.js (إضافة كود قشط الأفلام)
 
 // 🆕 مصفوفات منفصلة لكل تصنيف عشان الفرونت إند يستلمهم على الجاهز
@@ -56,7 +134,7 @@ async function movieSniffer() {
   );
 
   const browser = await puppeteer.launch({
-    headless: false,
+    headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -84,7 +162,7 @@ async function movieSniffer() {
       type: "direct_menu_site",
       source: "arabsid",
       searchKey: "عرب سيد",
-      fallbackBase: "https://vid.mycima.cc/categories-cimawbas.php?cat=5-cimawbas-aflam-3arby",
+      fallbackBase: "https://wecima.cx/category/arabic-movies",
     },
     // {
     //   type: "google_search",
@@ -130,18 +208,10 @@ async function movieSniffer() {
             }, task.source);
 
             baseUrl = baseUrl || task.fallbackBase;
-            const isCategoryPage = baseUrl.includes("/category/") || baseUrl.includes("/list/") || baseUrl.includes("categories-cimawbas") || baseUrl.includes("aflam-3arby");
+            const isCategoryPage = baseUrl.includes("/category/");
 
-            await page.goto(baseUrl, { waitUntil: "networkidle2" });
+            await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
             await new Promise((r) => setTimeout(r, 2000));
-
-            // If we ended up on Google (ISP block/bot detection in Egypt), dynamically fallback to wecima.cc
-            if (page.url().includes("google.com") && baseUrl.includes("wecima.cx")) {
-              console.log("⚠️ تم اكتشاف تحويل وي سيما الأصلي إلى جوجل. جاري الانتقال إلى النطاق البديل wecima.cc...");
-              baseUrl = baseUrl.replace("wecima.cx", "wecima.cc");
-              await page.goto(baseUrl, { waitUntil: "networkidle2" });
-              await new Promise((r) => setTimeout(r, 2000));
-            }
 
             const mappedSections = await page.evaluate(() => {
               const sectionsFound = {};
@@ -155,8 +225,8 @@ async function movieSniffer() {
                 if (
                   !href ||
                   !href.startsWith("http") ||
-                  (!href.includes("/category/") && !href.includes("/movies/") && !href.includes("/series/") && !href.includes("/list/")) ||
-                  href.includes("egyptian-movies")
+                  href === window.location.href ||
+                  (!href.includes("/category/") && !href.includes("/movies/") && !href.includes("/series/"))
                 )
                   return;
 
@@ -186,36 +256,22 @@ async function movieSniffer() {
                   cleanText.includes("لبناني");
 
                 if (hasMovies) {
-                  if (isForeign) {
-                    if (!sectionsFound["englishMovies"] || href.includes("/list/")) {
-                      sectionsFound["englishMovies"] = href;
-                    }
-                  } else if (isArabic) {
-                    if (!sectionsFound["arabicMovies"] || href.includes("/list/")) {
-                      sectionsFound["arabicMovies"] = href;
-                    }
-                  }
+                  if (isForeign) sectionsFound["englishMovies"] = href;
+                  else if (isArabic) sectionsFound["arabicMovies"] = href;
                 } else if (hasSeries) {
-                  if (isForeign) {
-                    if (!sectionsFound["englishSeries"] || href.includes("/list/")) {
-                      sectionsFound["englishSeries"] = href;
-                    }
-                  } else if (isArabic) {
-                    if (!sectionsFound["arabicSeries"] || href.includes("/list/")) {
-                      sectionsFound["arabicSeries"] = href;
-                    }
-                  }
+                  if (isForeign) sectionsFound["englishSeries"] = href;
+                  else if (isArabic) sectionsFound["arabicSeries"] = href;
                 }
               });
               return sectionsFound;
             });
 
             if (isCategoryPage || Object.keys(mappedSections).length === 0) {
-              if (task.fallbackBase.includes("arabic-movies") || task.fallbackBase.includes("egyptian-movies") || task.fallbackBase.includes("aflam-3arby")) {
+              if (task.fallbackBase.includes("category/arabic-movies") || task.fallbackBase.includes("arabic-movies")) {
                 if (!mappedSections["arabicMovies"]) {
                   mappedSections["arabicMovies"] = baseUrl;
                 }
-              } else if (task.fallbackBase.includes("arabic-series")) {
+              } else if (task.fallbackBase.includes("category/arabic-series") || task.fallbackBase.includes("arabic-series")) {
                 if (!mappedSections["arabicSeries"]) {
                   mappedSections["arabicSeries"] = baseUrl;
                 }
@@ -225,106 +281,68 @@ async function movieSniffer() {
             for (let key in mappedSections) {
               const sectionUrl = mappedSections[key];
               console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قشط القسم [${key}] من الرابط: ${sectionUrl}`);
-              
-              let extracted = [];
-              let success = false;
-              let retries = 3;
-              let actualSectionUrl = sectionUrl;
-              while (retries > 0 && !success) {
-                try {
-                  await page.goto(actualSectionUrl, { waitUntil: "networkidle2" });
+              await page.goto(sectionUrl, { waitUntil: "domcontentloaded" });
 
-                  // If we ended up on Google (ISP block/bot detection in Egypt), dynamically fallback to wecima.cc
-                  if (page.url().includes("google.com") && actualSectionUrl.includes("wecima.cx")) {
-                    console.log("⚠️ تم اكتشاف تحويل رابط القسم إلى جوجل. جاري الانتقال للنطاق البديل wecima.cc...");
-                    actualSectionUrl = actualSectionUrl.replace("wecima.cx", "wecima.cc");
-                    await page.goto(actualSectionUrl, { waitUntil: "networkidle2" });
+              await page.evaluate(async () => {
+                window.scrollBy(0, 1000);
+                await new Promise((r) => setTimeout(r, 1500));
+              });
+
+              const extracted = await page.evaluate(() => {
+                const items = [];
+                const cards = document.querySelectorAll(
+                  '.Small--Box, [class*="movie"], [class*="card"], a',
+                );
+
+                cards.forEach((card) => {
+                  let href = card.href || card.querySelector("a")?.href;
+                  if (
+                    !href ||
+                    !href.startsWith("http") ||
+                    href.includes("/category/") ||
+                    href.includes("/actor/") ||
+                    href.includes("/genre/") ||
+                    href.includes("/year/") ||
+                    href.includes("/tag/") ||
+                    href.includes("/tags/") ||
+                    href.includes("rgetUrl") ||
+                    href.includes("url=")
+                  )
+                    return;
+
+                  const imgEl =
+                    card.tagName === "IMG" ? card : card.querySelector("img");
+                  if (!imgEl) return;
+
+                  const posterUrl =
+                    imgEl.getAttribute("data-src") ||
+                    imgEl.getAttribute("data-lazy-src") ||
+                    imgEl.src;
+                  if (
+                    !posterUrl ||
+                    posterUrl.includes("logo") ||
+                    posterUrl.includes("blank") ||
+                    posterUrl.includes("cover.jpg")
+                  )
+                    return;
+
+                  const titleEl =
+                    card.querySelector("h3") || card.querySelector(".title");
+                  const titleText = titleEl
+                    ? titleEl.innerText.trim()
+                    : (imgEl.getAttribute("alt") || "").trim();
+
+                  if (titleText && titleText.length > 2) {
+                    if (!items.some((item) => item.link === href))
+                      items.push({
+                        title: titleText,
+                        poster: posterUrl,
+                        link: href,
+                      });
                   }
-
-                  await page.evaluate(async () => {
-                    // Auto Scroll 3000px progressively (6 steps of 500px) to load lazy-loaded elements
-                    for (let i = 0; i < 6; i++) {
-                      window.scrollBy(0, 500);
-                      await new Promise((r) => setTimeout(r, 400));
-                    }
-                  });
-
-                  extracted = await page.evaluate((currentSectionUrl) => {
-                    const items = [];
-                    const cards = document.querySelectorAll(
-                      '[class*="Grid"], [class*="box"], [class*="Box"], .Small--Box, [class*="movie"], [class*="card"], a',
-                    );
-
-                    cards.forEach((card) => {
-                      let href = card.href || card.querySelector("a")?.href;
-                      if (!href || !href.startsWith("http")) return;
-
-                      // Smart filtering: exclude section/category/tag/page/actor/year URLs to prevent capturing them by mistake
-                      const cleanHref = href.toLowerCase().replace(/\/$/, "");
-                      const cleanSection = currentSectionUrl.toLowerCase().replace(/\/$/, "");
-
-                      if (
-                        cleanHref === cleanSection ||
-                        cleanHref.includes("/category/") ||
-                        cleanHref.includes("/genres/") ||
-                        cleanHref.includes("/genre/") ||
-                        cleanHref.includes("/tag/") ||
-                        cleanHref.includes("/tags/") ||
-                        cleanHref.includes("/actor/") ||
-                        cleanHref.includes("/year/") ||
-                        cleanHref.includes("/page/") ||
-                        cleanHref.includes("/section/") ||
-                        cleanHref.includes("/sections/") ||
-                        href.includes("rgetUrl") ||
-                        href.includes("url=")
-                      ) {
-                        return;
-                      }
-
-                      const imgEl =
-                        card.tagName === "IMG" ? card : card.querySelector("img");
-                      if (!imgEl) return;
-
-                      const posterUrl =
-                        imgEl.getAttribute("data-src") ||
-                        imgEl.getAttribute("data-lazy-src") ||
-                        imgEl.src;
-                      if (
-                        !posterUrl ||
-                        posterUrl.includes("logo") ||
-                        posterUrl.includes("blank") ||
-                        posterUrl.includes("cover.jpg")
-                      )
-                        return;
-
-                      const titleEl =
-                        card.querySelector("h3") || card.querySelector(".title");
-                      const titleText = titleEl
-                        ? titleEl.innerText.trim()
-                        : (imgEl.getAttribute("alt") || "").trim();
-
-                      if (titleText && titleText.length > 2) {
-                        if (!items.some((item) => item.link === href))
-                          items.push({
-                            title: titleText,
-                            poster: posterUrl,
-                            link: href,
-                          });
-                      }
-                    });
-                    return items;
-                  }, sectionUrl);
-                  success = true;
-                } catch (err) {
-                  retries--;
-                  console.log(`⚠️ [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] خطأ أثناء قشط القسم [${key}]. محاولات متبقية: ${retries}. الخطأ: ${err.message}`);
-                  if (retries === 0) {
-                    console.log(`❌ فشل قشط القسم [${key}] نهائياً بعد عدة محاولات.`);
-                  } else {
-                    await new Promise((r) => setTimeout(r, 2000));
-                  }
-                }
-              }
+                });
+                return items;
+              });
 
               extracted.forEach((item) => {
                 let cleanTitle = item.title
@@ -334,18 +352,14 @@ async function movieSniffer() {
                   .replace(/مترجم/g, "")
                   .replace(/اون لاين/g, "")
                   .trim();
-                let targetLink = item.link;
-                if (targetLink.includes("mycima") && targetLink.includes("watch.php")) {
-                  targetLink = targetLink.replace("watch.php", "play.php");
-                }
                 if (
-                  !scrapedData[key].some((el) => el.targetUrl === targetLink)
+                  !scrapedData[key].some((el) => el.targetUrl === item.link)
                 ) {
                   scrapedData[key].push({
                     id: `${key}-${Math.random().toString(36).substr(2, 5)}`,
                     title: cleanTitle,
                     poster: item.poster,
-                    targetUrl: targetLink,
+                    targetUrl: item.link,
                   });
                 }
               });
@@ -356,7 +370,11 @@ async function movieSniffer() {
           } catch (err) {
             console.log("❌ فشل في توب سينما:", err.message);
           } finally {
-            await page.close();
+            try {
+              await page.close();
+            } catch (e) {
+              console.log("⚠️ فشل إغلاق الصفحة (توب سينما):", e.message);
+            }
           }
         }
 
@@ -445,7 +463,11 @@ async function movieSniffer() {
           } catch (err) {
             console.log("❌ فشل صيد العربي من جوجل:", err.message);
           } finally {
-            await page.close();
+            try {
+              await page.close();
+            } catch (e) {
+              console.log("⚠️ فشل إغلاق الصفحة (جوجل عربي):", e.message);
+            }
           }
         }
       }),
@@ -457,7 +479,11 @@ async function movieSniffer() {
   } catch (err) {
     console.log(`❌ خطأ عام بالسيرفر:`, err.message);
   } finally {
-    await browser.close();
+    try {
+      await browser.close();
+    } catch (e) {
+      console.log("⚠️ فشل إغلاق المتصفح (أفلام):", e.message);
+    }
   }
 }
 
@@ -506,13 +532,16 @@ async function masterSniffer() {
   });
 
   const REAL_LIVE_TARGETS = [
-    "https://www.yallashoot.video",
     "https://www.kooracity.com",
     "https://www.yalla-shoot-4u.com",
+    "https://egykoora.com/",
+    "https://live-soccer.tv/",
+    "https://koora-llive.best/",
+    "https://www.freekora.com",
   ];
 
   // اللف على المواقع بفتح صفحات مستقلة تماماً
-  for (let url of EXPLOIT_TARGETS) {
+  for (let url of REAL_LIVE_TARGETS) {
     let page = null;
     try {
       console.log(`🎯 جاري فتح متصفح مستقل لـ: ${url}`);
@@ -541,7 +570,7 @@ async function masterSniffer() {
             const teamBEl = card.querySelector(".TM2 .TM_Name");
 
             // قنص رابط البث الشفاف
-            const linkEl = card.querySelector('a[href*="/matches/"]');
+            const linkEl = card.querySelector("a");
 
             if (teamAEl && teamBEl && linkEl) {
               const teamA = teamAEl.innerText.trim();
@@ -558,15 +587,17 @@ async function masterSniffer() {
 
         // 2. Fallback الكلاسيكي للمواقع التانية لو ملقاش الستركتشر ده
         if (items.length === 0) {
-          const allLinks = document.querySelectorAll(
-            "main a, #content a, .content a",
-          );
+          const allLinks = document.querySelectorAll("a");
           allLinks.forEach((a) => {
             const text = (a.innerText || "").trim();
             if (
               (text.includes("🆚") ||
                 text.includes("ضد") ||
-                text.includes("مباراة")) &&
+                text.includes("مباراة") ||
+                text.includes("مباشر") ||
+                text.includes("جارية") ||
+                text.includes("الان") ||
+                text.includes("LIVE")) &&
               a.href.startsWith("http")
             ) {
               items.push({ title: text, link: a.href });
@@ -579,34 +610,35 @@ async function masterSniffer() {
 
       if (extractedLinks.length > 0) {
         extractedLinks.forEach((item) => {
-          let cleanTitle = item.title;
-          cleanTitle = cleanTitle
-            .replace(/مشاهدة مباراة/g, "")
-            .replace(/اليوم \d{1,2}-\d{1,2}-\d{2,4}/g, "")
-            .replace(/قمة ملعب.*/g, "")
+          // تنظيف أحرف الـ HTML
+          const cleanTitle = (item.title || "")
+            .replace(/<\/?[^>]+(>|$)/g, "")
             .trim();
 
-          let separator = " و ";
-          if (cleanTitle.includes(" ضد ")) separator = " ضد ";
-          else if (cleanTitle.includes(" 🆚 ")) separator = " 🆚 ";
+          const { teamA, teamB } = splitMatchTitle(cleanTitle);
 
-          const parts = cleanTitle.split(separator);
-          let teamA = parts[0] ? parts[0].trim() : "فريق أ";
-          let teamB = parts[1] ? parts[1].trim() : "فريق ب";
+          const linkLower = item.link.toLowerCase();
+          const titleLower = cleanTitle.toLowerCase();
 
-          if (teamB.includes("في")) teamB = teamB.split("في")[0];
-          if (teamB.includes("ضمن")) teamB = teamB.split("ضمن")[0];
-          teamB = teamB.trim();
-
+          // لو لقط كلمة "مباشر" أو "الآن" أو أي إشارة للبث، نجبر isLive على true والـ time على "لايف 🔴"
           const isLiveNow =
-            item.link.includes("live") || item.title.includes("الآن");
+            linkLower.includes("live") ||
+            linkLower.includes("watch") ||
+            linkLower.includes("stream") ||
+            titleLower.includes("الآن") ||
+            titleLower.includes("الان") ||
+            titleLower.includes("مباشر") ||
+            titleLower.includes("لايف") ||
+            titleLower.includes("live") ||
+            titleLower.includes("جارية") ||
+            titleLower.includes("جاريه");
 
           matchesFound.push({
             id: `sniff-${Math.random().toString(36).substr(2, 5)}`,
             teamA: teamA,
             teamB: teamB,
             isLive: isLiveNow,
-            time: isLiveNow ? "لايف 🔴" : "قريباً 🕒",
+            time: isLiveNow ? "لايف 🔴" : "بعد قليل 🕒",
             targetSiteUrl: item.link,
           });
         });
@@ -622,25 +654,192 @@ async function masterSniffer() {
       console.log(`❌ فشل تحميل ${url}:`, err.message);
     } finally {
       // 🆕 قفل الصفحة الحالية فوراً لتوفير الرام قبل الانتقال للموقع التالي
-      if (page) await page.close();
+      if (page) {
+        try {
+          await page.close();
+        } catch (e) {
+          console.log(`⚠️ فشل إغلاق الصفحة لـ ${url}:`, e.message);
+        }
+      }
     }
   }
 
-  await browser.close();
+  try {
+    await browser.close();
+  } catch (e) {
+    console.log("⚠️ فشل إغلاق المتصفح (مباريات):", e.message);
+  }
 
   // فلترة وتجميع النهائي
   if (matchesFound.length > 0) {
-    scrapedMatches = Array.from(
-      new Map(matchesFound.map((m) => [`${m.teamA}-${m.teamB}`, m])).values(),
-    );
+    const grouped = [];
+    for (const m of matchesFound) {
+      const existing = grouped.find((g) => areMatchesSame(g, m));
+      if (!existing) {
+        grouped.push({
+          id: m.id,
+          teamA: m.teamA,
+          teamB: m.teamB,
+          isLive: m.isLive,
+          time: m.time,
+          targetSiteUrl: m.targetSiteUrl,
+          alternativeUrls: [],
+        });
+      } else {
+        if (
+          existing.targetSiteUrl !== m.targetSiteUrl &&
+          !existing.alternativeUrls.includes(m.targetSiteUrl)
+        ) {
+          existing.alternativeUrls.push(m.targetSiteUrl);
+        }
+        if (m.isLive) {
+          existing.isLive = true;
+          existing.time = "لايف 🔴";
+        }
+      }
+    }
+
+    // ترتيب المباريات بحيث يظهر المباشر أولاً ثم بعد قليل
+    grouped.sort((a, b) => {
+      if (a.isLive && !b.isLive) return -1;
+      if (!a.isLive && b.isLive) return 1;
+      return 0;
+    });
+
+    scrapedMatches = grouped;
     console.log(
-      `📊 إجمالي المباريات المجمعة من كل المواقع معاً: ${scrapedMatches.length}`,
+      `📊 إجمالي المباريات المجمعة من كل المواقع معاً مرتبة: ${scrapedMatches.length}`,
     );
   } else {
     console.log("🔄 شحن داتا الديمو...");
     loadFallback();
   }
 }
+
+function loadFallback() {
+  scrapedMatches = [
+    {
+      id: "sniff-demo1",
+      teamA: "كندا",
+      teamB: "البوسنة والهرسك",
+      isLive: true,
+      time: "لايف 🔴",
+      targetSiteUrl: "https://www.lkora.live/matches/knda-vs-bosna/",
+      alternativeUrls: [
+        "https://www.yallashoot.video/video/canada-vs-bosnia-and-herzegovina-live-stream-12-6-2026/",
+      ],
+    },
+    {
+      id: "sniff-demo2",
+      teamA: "مصر",
+      teamB: "السنغال",
+      isLive: false,
+      time: "بعد قليل 🕒",
+      targetSiteUrl: "https://www.lkora.live/matches/egypt-vs-senegal/",
+      alternativeUrls: [],
+    },
+  ];
+}
+
+async function sniffStream(url, page) {
+  if (!url) return null;
+  if (url.includes(".m3u8")) {
+    return { m3u8Url: url, referer: "" };
+  }
+
+  let caught = null;
+  const requestHandler = (r) => {
+    const u = r.url();
+    if (u.includes(".m3u8") && !caught) {
+      console.log(`[Sniffer] Caught .m3u8 URL: ${u}`);
+      caught = {
+        m3u8Url: u,
+        referer: r.headers()["referer"] || "",
+      };
+    }
+  };
+
+  page.on("request", requestHandler);
+
+  try {
+    console.log(`[Sniffer] Loading: ${url}`);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
+    await new Promise((r) => setTimeout(r, 4000));
+
+    if (caught) {
+      page.off("request", requestHandler);
+      return caught;
+    }
+
+    // Check for redirection links/hash parameter
+    const redirectUrl = await page.evaluate(() => {
+      const links = Array.from(document.querySelectorAll("a"));
+      let found = links.find((l) => l.href.includes("hash="));
+      if (found) return found.href;
+      found = links.find(
+        (l) =>
+          l.innerText.includes("انقر هنا") ||
+          l.innerText.includes("المشاهدة") ||
+          l.innerText.includes("صفحة المشاهدة"),
+      );
+      if (found) return found.href;
+      return null;
+    });
+
+    if (redirectUrl) {
+      console.log(`[Sniffer] Found redirection URL: ${redirectUrl}`);
+      if (redirectUrl.includes("hash=")) {
+        const urlObj = new URL(redirectUrl);
+        const hash = urlObj.searchParams.get("hash");
+        if (hash) {
+          const decoded = Buffer.from(
+            hash.replace(/__/g, "/").replace(/-/g, "+"),
+            "base64",
+          ).toString("utf8");
+          const foundUrls = decoded.match(/https?:\/\/[^\s"'`>]+/g);
+          if (foundUrls && foundUrls.length > 0) {
+            console.log(`[Sniffer] Decoded hash player URLs:`, foundUrls);
+            for (const playerUrl of foundUrls) {
+              console.log(`[Sniffer] Trying player URL: ${playerUrl}`);
+              try {
+                await page.goto(playerUrl, {
+                  waitUntil: "domcontentloaded",
+                  timeout: 12000,
+                });
+                await new Promise((r) => setTimeout(r, 5000));
+                if (caught) {
+                  page.off("request", requestHandler);
+                  return caught;
+                }
+              } catch (err) {
+                console.log(
+                  `[Sniffer] Error on player ${playerUrl}:`,
+                  err.message,
+                );
+              }
+            }
+          }
+        }
+      } else {
+        console.log(
+          `[Sniffer] Navigating to redirect page directly: ${redirectUrl}`,
+        );
+        await page.goto(redirectUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 15000,
+        });
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    }
+  } catch (err) {
+    console.log(`[Sniffer] Error sniffing URL ${url}:`, err.message);
+  } finally {
+    page.off("request", requestHandler);
+  }
+
+  return caught;
+}
+
 // تشغيل وتكرار العملية كل 15 دقيقة
 masterSniffer();
 setInterval(masterSniffer, 15 * 60 * 1000);
@@ -683,7 +882,6 @@ app.get("/api/stream", async (req, res) => {
     return startFfmpeg(targetUrl, res, req);
   }
 
-  // لو الرابط موقع، يفتح البابيتير ويقنص اللينك المخفي
   const browser = await puppeteer.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -717,7 +915,11 @@ app.get("/api/stream", async (req, res) => {
     console.log(`ℹ️ [Direct Stream] انتهت مهلة القنص المبكرة للـ HLS: ${e.message}`);
   }
 
-  await browser.close();
+  try {
+    await browser.close();
+  } catch (e) {
+    console.log("⚠️ [Direct Stream] فشل إغلاق المتصفح:", e.message);
+  }
 
   if (caughtM3u8) {
     console.log(`🎯 [Direct Stream] تم قنص m3u8 والبدء بـ FFmpeg: ${caughtM3u8}`);
@@ -868,12 +1070,8 @@ app.get("/api/media/stream", async (req, res) => {
 
   if (caughtStream) {
     console.log(`🎯 [Media Stream API] نجاح قنص الرابط: ${caughtStream}`);
-    let type = "iframe";
-    if (caughtStream.includes(".m3u8") || caughtStream.includes("urlset")) {
-      type = "hls";
-    } else if (caughtStream.includes(".mp4") || caughtStream.includes(".ts")) {
-      type = "direct";
-    }
+    const isDirect = caughtStream.includes(".m3u8") || caughtStream.includes(".mp4") || caughtStream.includes(".ts");
+    const type = isDirect ? "direct" : "iframe";
     res.json({ streamUrl: caughtStream, type });
   } else {
     console.log(`❌ [Media Stream API] لم يتم العثور على رابط بث`);
@@ -882,21 +1080,48 @@ app.get("/api/media/stream", async (req, res) => {
 });
 function startFfmpeg(url, res, req) {
   res.setHeader("Content-Type", "video/mp4");
-  const ffmpeg = spawn("ffmpeg", [
-    "-i",
-    url,
+  const ffmpegBin = getFfmpegPath();
+
+  const args = [];
+  if (referer) {
+    args.push(
+      "-user_agent",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    );
+    args.push("-referer", referer);
+  }
+
+  args.push("-i", url);
+  args.push(
     "-c:v",
     "copy",
     "-c:a",
     "copy",
+    "-bsf:a",
+    "aac_adtstoasc",
     "-movflags",
-    "frag_keyframe+empty_moov+faststart",
+    "frag_keyframe+empty_moov",
     "-f",
     "mp4",
     "-",
-  ]);
+  );
+
+  console.log(`[Stream API] Spawning FFmpeg from: ${ffmpegBin}`);
+  const ffmpeg = spawn(ffmpegBin, args);
+
+  ffmpeg.on("error", (err) => {
+    console.error("[Stream API] FFmpeg process error:", err);
+  });
+
+  ffmpeg.stderr.on("data", (data) => {
+    // Consume stderr to avoid process blocking, but do not print/log the progress frames.
+  });
+
   ffmpeg.stdout.pipe(res);
-  req.on("close", () => ffmpeg.kill());
+  req.on("close", () => {
+    console.log("[Stream API] Client connection closed, killing FFmpeg...");
+    ffmpeg.kill();
+  });
 }
 
-app.listen(3001, () => console.log("🚀 Slayer Scraper Running on Port 3001"));
+app.listen(3001, () => console.log("🚀 Slayer Scraper Running on Port 3001"))
