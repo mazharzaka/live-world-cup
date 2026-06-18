@@ -112,6 +112,7 @@ function MatchCard({ match, isActive, onWatch }) {
 
 // ─── Helper: Dynamic API Base URL ──────────────────────────────────────────────
 const getApiBaseUrl = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
   if (typeof window === 'undefined') return 'http://localhost:3001';
   const hostname = window.location.hostname;
   if (hostname.includes('devtunnels.ms')) {

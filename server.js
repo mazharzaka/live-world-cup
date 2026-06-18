@@ -1279,4 +1279,5 @@ function startFfmpeg(url, res, req, referer) {
   });
 }
 
-app.listen(3001, () => console.log("🚀 Slayer Scraper Running on Port 3001"))
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log(`🚀 Slayer Scraper Running on Port ${PORT}`));
