@@ -516,6 +516,156 @@ movieSniffer();
 
 // Endpoint للأفلام
 app.get("/api/movies", (req, res) => res.json(scrapedMovies));
+
+// ─── Stream Cache & background pre-sniffer ───────────────────────────
+const streamCache = new Map(); // key: watchUrl, value: { streamUrl, type, referer, timestamp }
+
+async function getOrSniffStream(url) {
+  if (!url) return null;
+  
+  // Clean URL first
+  const cleanUrl = cleanMovieUrl(url);
+  
+  // 1. Check cache (valid for 10 minutes)
+  const cached = streamCache.get(cleanUrl);
+  if (cached && (Date.now() - cached.timestamp < 10 * 60 * 1000)) {
+    console.log(`⚡ [Cache Hit] Stream found in cache for: ${cleanUrl}`);
+    return cached;
+  }
+  
+  console.log(`🔍 [Cache Miss] Sniffing stream for: ${cleanUrl}`);
+  // Launch Puppeteer to resolve the stream URL
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-blink-features=AutomationControlled",
+      "--disable-features=IsolateOrigins,site-per-process",
+      "--ignore-certificate-errors",
+    ],
+  });
+  
+  let caughtStream = null;
+  let fallbackEmbedUrl = null;
+  let resolveStream;
+  const streamPromise = new Promise((resolve) => {
+    resolveStream = resolve;
+  });
+  
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1366, height: 768 });
+    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+    
+    await page.setRequestInterception(true);
+    page.on("request", (r) => {
+      const reqUrl = r.url().toLowerCase();
+      const cleanTarget = cleanUrl.toLowerCase().replace("://m.", "://");
+      
+      if (reqUrl.includes(cleanTarget) && (r.resourceType() === 'document' || r.resourceType() === 'navigation')) {
+        r.continue();
+        return;
+      }
+      
+      if (
+        reqUrl.includes("popads") ||
+        reqUrl.includes("adsterra") ||
+        reqUrl.includes("analytics") ||
+        reqUrl.includes("doubleclick") ||
+        reqUrl.includes("onclick") ||
+        reqUrl.includes("exoclick")
+      ) {
+        r.abort();
+      } else {
+        if ((reqUrl.includes(".m3u8") || reqUrl.includes(".mp4") || reqUrl.includes(".ts")) && !caughtStream) {
+          if (!reqUrl.includes("google") && !reqUrl.includes("facebook")) {
+            caughtStream = r.url();
+            resolveStream(caughtStream);
+          }
+        }
+        r.continue();
+      }
+    });
+    
+    try {
+      await Promise.race([
+        page.goto(cleanUrl, { waitUntil: "domcontentloaded", timeout: 15000 }),
+        streamPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000))
+      ]);
+    } catch (e) {
+      console.log(`ℹ️ [Sniffer] Page load timeout: ${e.message}`);
+    }
+    
+    if (!caughtStream) {
+      const hasIframe = await page.$("iframe");
+      if (!hasIframe) {
+        await page.evaluate(() => {
+          const serverButtons = document.querySelectorAll(".servers-list li, .serversNav li, [class*=\"server\"] li, .watch-servers a, .ServersList a");
+          if (serverButtons.length > 0) {
+            serverButtons[0].click();
+          }
+        });
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      
+      await page.waitForSelector("iframe", { timeout: 5000 });
+      const embedUrl = await page.evaluate(() => {
+        const iframes = Array.from(document.querySelectorAll("iframe"));
+        for (let iframe of iframes) {
+          const src = iframe.src || iframe.getAttribute("data-src") || iframe.getAttribute("data-lazy-src");
+          if (src && (src.includes("embed") || src.includes("player") || src.includes("vidtube") || src.includes("asd") || src.includes("arabseed"))) {
+            return src;
+          }
+        }
+        return null;
+      });
+      
+      if (embedUrl) {
+        fallbackEmbedUrl = embedUrl;
+        await page.goto(embedUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+        await new Promise((r) => setTimeout(r, 2000));
+        
+        if (!caughtStream) {
+          await page.mouse.click(680, 400);
+        }
+        
+        await Promise.race([
+          streamPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout inside embed")), 6000))
+        ]);
+      }
+    }
+  } catch (err) {
+    console.error(`❌ Sniffer helper error for ${cleanUrl}:`, err.message);
+  } finally {
+    try {
+      await browser.close();
+    } catch (e) {}
+  }
+  
+  if (!caughtStream && fallbackEmbedUrl) {
+    caughtStream = fallbackEmbedUrl;
+  }
+  
+  if (caughtStream) {
+    const isDirect = caughtStream.includes(".m3u8") || caughtStream.includes(".mp4") || caughtStream.includes(".ts");
+    const type = isDirect ? "direct" : "iframe";
+    const data = {
+      streamUrl: caughtStream,
+      type,
+      referer: cleanUrl,
+      timestamp: Date.now()
+    };
+    streamCache.set(cleanUrl, data);
+    console.log(`🎯 [Sniffer success] Cached stream for: ${cleanUrl} -> ${caughtStream}`);
+    return data;
+  }
+  
+  return null;
+}
+
 async function masterSniffer() {
   console.log("🥷 [Slayer Scraper] بدء عملية الشفط المتوازي والمستقل...");
   let matchesFound = [];
@@ -710,6 +860,13 @@ async function masterSniffer() {
     console.log(
       `📊 إجمالي المباريات المجمعة من كل المواقع معاً مرتبة: ${scrapedMatches.length}`,
     );
+
+    // Pre-sniff the main stream URL for all live matches in the background
+    for (const match of grouped) {
+      if (match.isLive && match.targetSiteUrl) {
+        getOrSniffStream(match.targetSiteUrl).catch(() => {});
+      }
+    }
   } else {
     console.log("🔄 شحن داتا الديمو...");
     loadFallback();
@@ -874,58 +1031,23 @@ app.get("/api/stream", async (req, res) => {
   if (!targetUrl) return res.status(400).send("الرابط مطلوب");
 
   targetUrl = cleanMovieUrl(targetUrl);
+  console.log(`📡 [Direct Stream] طلب تشغيل البث لـ: ${targetUrl}`);
 
-  console.log(`📡 [Direct Stream] جاري تشغيل البث لـ: ${targetUrl}`);
-
-  // لو الرابط المارر هو أصلاً سورس بث مباشر جاهز (HLS .m3u8) شغل الـ FFmpeg فوراً
   if (targetUrl.includes(".m3u8")) {
     return startFfmpeg(targetUrl, res, req);
   }
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-  const page = await browser.newPage();
-
-  let caughtM3u8 = null;
-  let resolveStream;
-  const streamPromise = new Promise((resolve) => {
-    resolveStream = resolve;
-  });
-
-  await page.setRequestInterception(true);
-  page.on("request", (r) => {
-    const reqUrl = r.url();
-    if ((reqUrl.includes(".m3u8") || reqUrl.includes(".mp4")) && !caughtM3u8) {
-      caughtM3u8 = reqUrl;
-      resolveStream(reqUrl);
+  try {
+    const result = await getOrSniffStream(targetUrl);
+    if (result && result.streamUrl) {
+      console.log(`🎯 [Direct Stream] بدء بث FFmpeg لـ: ${result.streamUrl}`);
+      return startFfmpeg(result.streamUrl, res, req, result.referer);
+    } else {
+      res.status(404).send("لم يتم العثور على إشارة بث حالية");
     }
-    r.continue();
-  });
-
-  try {
-    // سباق بين تحميل الصفحة، التقاط الـ m3u8، أو مهلة 6 ثوانٍ كحد أقصى للإنهاء الفوري
-    await Promise.race([
-      page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 10000 }),
-      streamPromise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 6000))
-    ]);
-  } catch (e) {
-    console.log(`ℹ️ [Direct Stream] انتهت مهلة القنص المبكرة للـ HLS: ${e.message}`);
-  }
-
-  try {
-    await browser.close();
-  } catch (e) {
-    console.log("⚠️ [Direct Stream] فشل إغلاق المتصفح:", e.message);
-  }
-
-  if (caughtM3u8) {
-    console.log(`🎯 [Direct Stream] تم قنص m3u8 والبدء بـ FFmpeg: ${caughtM3u8}`);
-    startFfmpeg(caughtM3u8, res, req);
-  } else {
-    res.status(404).send("لم يتم العثور على إشارة بث حالية");
+  } catch (err) {
+    console.error(`❌ Error in /api/stream:`, err.message);
+    res.status(500).send("حدث خطأ أثناء قنص البث");
   }
 });
 
@@ -934,156 +1056,26 @@ app.get("/api/media/stream", async (req, res) => {
   let targetUrl = req.query.targetUrl || req.query.url;
   if (!targetUrl) return res.status(400).json({ error: "الرابط مطلوب" });
 
-  targetUrl = cleanMovieUrl(targetUrl);
-  console.log(`🎬 [Media Stream API] جاري قنص رابط البث لـ: ${targetUrl}`);
-
-  const browser = await puppeteer.launch({
-    headless: false, // سيبها false عشان تراقب المتصفح وهو بيفك الحماية ويضغط بنفسه
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-features=IsolateOrigins,site-per-process',
-      '--ignore-certificate-errors'
-    ],
-  });
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1366, height: 768 });
-  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
-
-  let caughtStream = null;
-  let fallbackEmbedUrl = null;
-  let resolveStream;
-  const streamPromise = new Promise((resolve) => {
-    resolveStream = resolve;
-  });
-
-  // 🔥 تصليح 1: نظام الـ if-else المقفل بإحكام مع فحص مرن للرابط الرئيسي
-  await page.setRequestInterception(true);
-  page.on("request", (r) => {
-    const reqUrl = r.url().toLowerCase();
-    const cleanTarget = targetUrl.toLowerCase().replace("://m.", "://"); // إزالة m. للمقارنة المرنة
-
-    // تكة الأمان: لو الطلب ده هو الصفحة الرئيسية أو تحويلاتها، عّديه فوراً بدون فلاتر
-    if (reqUrl.includes(cleanTarget) && (r.resourceType() === 'document' || r.resourceType() === 'navigation')) {
-      r.continue();
-      return;
-    }
-
-    // حظر الإعلانات الشرسة فقط اللي بتعمل بوب اب وشلل
-    if (
-      reqUrl.includes("popads") ||
-      reqUrl.includes("adsterra") ||
-      reqUrl.includes("analytics") ||
-      reqUrl.includes("doubleclick") ||
-      reqUrl.includes("onclick") ||
-      reqUrl.includes("exoclick")
-    ) {
-      r.abort();
-    }
-    else {
-      // التقاط الـ m3u8 أو mp4 أو ts لايف من الشبكة
-      if ((reqUrl.includes(".m3u8") || reqUrl.includes(".mp4") || reqUrl.includes(".ts")) && !caughtStream) {
-        if (!reqUrl.includes("google") && !reqUrl.includes("facebook")) {
-          caughtStream = r.url();
-          resolveStream(caughtStream);
-        }
-      }
-      r.continue();
-    }
-  });
-
-  // 1. محاولة تحميل الصفحة الأب
+  console.log(`🎬 [Media Stream API] طلب قنص رابط البث لـ: ${targetUrl}`);
+  
   try {
-    await Promise.race([
-      // 🔥 تصليح 2: استبدال commit بـ domcontentloaded (القيمة الرسمية الصحيحة والسريعة)
-      page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 15000 }),
-      streamPromise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000))
-    ]);
-  } catch (e) {
-    console.log(`ℹ️ [Media Stream API] انتهت مهلة قنص الصفحة الرئيسية (متوقع): ${e.message}`);
-  }
-
-  // 2. تكتيك الفرز والضغط الذكي (عرب سيد + سينما فور اب)
-  if (!caughtStream) {
-    try {
-      // فحص لو الـ iframe مش ظاهر في أول لقطة (حالة عرب سيد وعمليات الـ Defer)
-      const hasIframe = await page.$("iframe");
-      if (!hasIframe) {
-        console.log(`⚙️ [تكتيك عرب سيد] الـ iframe مختفي، جاري محاكاة الضغط على قائمة السيرفرات...`);
-        await page.evaluate(() => {
-          // استهداف أزرار سيرفرات التشغيل في عرب سيد، سينما فور اب، وماي سيما
-          const serverButtons = document.querySelectorAll(".servers-list li, .serversNav li, [class*=\"server\"] li, .watch-servers a, .ServersList a");
-          if (serverButtons.length > 0) {
-            serverButtons[0].click(); // اضغط على أول سيرفر متاح لتوليد الـ iframe ديناميكياً
-          }
-        });
-        await new Promise((r) => setTimeout(r, 3000)); // انتظار 3 ثوانٍ كاملة لفرش الـ DOM الجديد وتوليد الـ iframe
-      }
-
-      // لقط الـ Embed URL من الـ iframe المكتشف أو المتولد
-      await page.waitForSelector("iframe", { timeout: 5000 });
-      const embedUrl = await page.evaluate(() => {
-        const iframes = Array.from(document.querySelectorAll("iframe"));
-        for (let iframe of iframes) {
-          const src = iframe.src || iframe.getAttribute("data-src") || iframe.getAttribute("data-lazy-src");
-          if (src && (src.includes("embed") || src.includes("player") || src.includes("vidtube") || src.includes("asd") || src.includes("arabseed"))) {
-            return src;
-          }
-        }
-        return null;
-      });
-
-      if (embedUrl) {
-        fallbackEmbedUrl = embedUrl;
-        console.log(`📡 [Media Stream API] تم العثور على مشغل خارجي: ${embedUrl}. جاري الاختراق العميق...`);
-
-        // 🔥 تصليح 3: تعديل الـ waitUntil هنا أيضاً لـ domcontentloaded
-        await page.goto(embedUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
-        await new Promise((r) => setTimeout(r, 2000));
-
-        // كليك ذكي جوه الـ Embed لتنشيط حزم الـ mp4/m3u8 المستهبلة في الشبكة
-        if (!caughtStream) {
-          console.log("🖱️ [Media Stream API] جاري عمل Click داخل المشغل لتفجير الـ Network Requests...");
-          await page.mouse.click(680, 400);
-        }
-
-        await Promise.race([
-          streamPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout inside embed")), 6000))
-        ]);
-      }
-    } catch (err) {
-      console.log(`ℹ️ [Media Stream API] فشل القنص العميق داخل المشغل: ${err.message}`);
+    const result = await getOrSniffStream(targetUrl);
+    if (result) {
+      res.json({ streamUrl: result.streamUrl, type: result.type });
+    } else {
+      res.status(404).json({ error: "لم يتم العثور على رابط بث نظيف حالياً" });
     }
-  }
-
-  // 3. الإغلاق والإنقاذ
-  await browser.close();
-
-  if (!caughtStream && fallbackEmbedUrl) {
-    caughtStream = fallbackEmbedUrl;
-  }
-
-  console.log("💎 الرابط النهائي المستخرج:", caughtStream);
-
-  if (caughtStream) {
-    console.log(`🎯 [Media Stream API] نجاح قنص الرابط: ${caughtStream}`);
-    const isDirect = caughtStream.includes(".m3u8") || caughtStream.includes(".mp4") || caughtStream.includes(".ts");
-    const type = isDirect ? "direct" : "iframe";
-    res.json({ streamUrl: caughtStream, type });
-  } else {
-    console.log(`❌ [Media Stream API] لم يتم العثور على رابط بث`);
-    res.status(404).json({ error: "لم يتم العثور على رابط بث نظيف حالياً" });
+  } catch (err) {
+    console.error(`❌ Error in /api/media/stream:`, err.message);
+    res.status(500).json({ error: "حدث خطأ أثناء قنص البث" });
   }
 });
-function startFfmpeg(url, res, req) {
+function startFfmpeg(url, res, req, referer) {
   res.setHeader("Content-Type", "video/mp4");
   const ffmpegBin = getFfmpegPath();
 
   const args = [];
-  if (referer) {
+  if (typeof referer !== 'undefined' && referer) {
     args.push(
       "-user_agent",
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",

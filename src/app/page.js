@@ -110,6 +110,22 @@ function MatchCard({ match, isActive, onWatch }) {
   );
 }
 
+// ─── Helper: Dynamic API Base URL ──────────────────────────────────────────────
+const getApiBaseUrl = () => {
+  if (typeof window === 'undefined') return 'http://localhost:3001';
+  const hostname = window.location.hostname;
+  if (hostname.includes('devtunnels.ms')) {
+    return `https://${hostname.replace('-3000', '-3001')}`;
+  }
+  return `http://${hostname}:3001`;
+};
+
+// ─── Helper: Get Servers List ──────────────────────────────────────────────────
+const getServers = (match) => {
+  if (!match) return [];
+  return [match.targetSiteUrl, ...(match.alternativeUrls || [])];
+};
+
 // ─── المكوّن الرئيسي ──────────────────────────────────────────────────────────
 export default function HomePage() {
   // ─── State ──────────────────────────────────────────────────────────────
@@ -117,6 +133,14 @@ export default function HomePage() {
   const [isLoadingStream, setIsLoadingStream] = useState(false); // loading البث
   const [hasError, setHasError]         = useState(false);     // خطأ في البث
   const [arabicDate, setArabicDate]     = useState('');        // التاريخ (client-only لتجنب hydration mismatch)
+  const [activeServerIndex, setActiveServerIndex] = useState(0); // السيرفر النشط
+
+  // Custom Player States
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [volume, setVolume] = useState(0.5);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
 
   // ─── RTK Query ──────────────────────────────────────────────────────────
   const { data, isLoading: loadingMatches, isError: scheduleError } = useGetScheduleQuery();
@@ -126,6 +150,35 @@ export default function HomePage() {
 
   // ─── Refs ───────────────────────────────────────────────────────────────
   const videoRef = useRef(null); // مرجع لعنصر الفيديو
+  const hlsRef = useRef(null); // مرجع لمكتبة hls.js
+  const controlsTimeoutRef = useRef(null);
+
+  const resetControlsTimeout = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      const video = videoRef.current;
+      if (video && !video.paused) {
+        setShowControls(false);
+      }
+    }, 3000);
+  }, []);
+
+  const destroyHls = useCallback(() => {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      destroyHls();
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, [destroyHls]);
 
   // ─── تعيين التاريخ بالعربية (client-only) ───────────────────────────────
   useEffect(() => {
@@ -139,50 +192,66 @@ export default function HomePage() {
     );
   }, []);
 
-  // ─── تشغيل مباراة ────────────────────────────────────────────────────────
-  /**
-   * عند الضغط على "شاهد الآن":
-   * 1. تحديث الـ state
-   * 2. إعادة تعيين الفيديو (إيقاف FFmpeg القديم)
-   * 3. تعيين src الجديد → يُطلق طلب بث جديد للسيرفر
-   */
-  const handleWatchMatch = useCallback((match) => {
-    if (!match.targetSiteUrl) {
-      alert('لا يوجد رابط بث متاح لهذه المباراة.');
-      return;
-    }
+  // ─── تشغيل البث المباشر للسيرفر المختار ────────────────────────────────────
+  const playStream = useCallback((match, url, serverIndex) => {
+    if (!url) return;
 
-    // إعادة تعيين الحالة
-    setCurrentMatch(match);
     setIsLoadingStream(true);
     setHasError(false);
+    setActiveServerIndex(serverIndex);
 
     const video = videoRef.current;
     if (!video) return;
 
-    // إيقاف البث القديم أولاً (يُغلق FFmpeg على السيرفر عبر abort signal)
+    // إعادة تعيين الفيديو
     video.pause();
+    destroyHls();
     video.removeAttribute('src');
     video.load();
     video.classList.remove('visible');
 
-    // جلب رابط البث من السيرفر
     setTimeout(async () => {
       try {
-        const streamApiUrl = `http://localhost:3001/api/stream?url=${encodeURIComponent(match.targetSiteUrl)}`;
+        const streamApiUrl = `${getApiBaseUrl()}/api/media/stream?url=${encodeURIComponent(url)}`;
         const response = await fetch(streamApiUrl);
         const data = await response.json();
 
-        if (data.m3u8Url) {
-          video.src = data.m3u8Url;
-          video.load();
-          video.play().catch(() => {
-            // autoplay قد يكون محظوراً → لا بأس، المستخدم يضغط play يدوياً
-          });
+        if (data.streamUrl) {
+          const isHls = data.type === 'direct' && (data.streamUrl.includes('.m3u8') || data.streamUrl.includes('urlset'));
+          
+          if (isHls) {
+            const Hls = (await import('hls.js')).default;
+            if (Hls.isSupported()) {
+              const hls = new Hls({
+                maxMaxBufferLength: 10,
+              });
+              hls.loadSource(data.streamUrl);
+              hls.attachMedia(video);
+              hlsRef.current = hls;
+              hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                video.play().catch(() => {});
+              });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+              video.src = data.streamUrl;
+              video.load();
+              video.play().catch(() => {});
+            } else {
+              video.src = `${getApiBaseUrl()}/api/stream?url=${encodeURIComponent(url)}`;
+              video.load();
+              video.play().catch(() => {});
+            }
+          } else {
+            if (data.type === 'direct') {
+              video.src = data.streamUrl;
+            } else {
+              video.src = `${getApiBaseUrl()}/api/stream?url=${encodeURIComponent(url)}`;
+            }
+            video.load();
+            video.play().catch(() => {});
+          }
         } else {
           setIsLoadingStream(false);
           setHasError(true);
-          alert(data.error || 'لم يتم العثور على رابط m3u8');
         }
       } catch (err) {
         setIsLoadingStream(false);
@@ -190,20 +259,28 @@ export default function HomePage() {
         console.error('Error fetching stream:', err);
       }
     }, 100);
-  }, []);
+  }, [destroyHls]);
+
+  // ─── تشغيل مباراة ────────────────────────────────────────────────────────
+  const handleWatchMatch = useCallback((match) => {
+    if (!match.targetSiteUrl) {
+      alert('لا يوجد رابط بث متاح لهذه المباراة.');
+      return;
+    }
+    setCurrentMatch(match);
+    playStream(match, match.targetSiteUrl, 0);
+  }, [playStream]);
 
   // ─── إعادة المحاولة ───────────────────────────────────────────────────────
   const handleRetry = useCallback(() => {
     if (currentMatch) {
-      handleWatchMatch(currentMatch);
+      const urls = getServers(currentMatch);
+      const activeUrl = urls[activeServerIndex] || currentMatch.targetSiteUrl;
+      playStream(currentMatch, activeUrl, activeServerIndex);
     }
-  }, [currentMatch, handleWatchMatch]);
+  }, [currentMatch, activeServerIndex, playStream]);
 
-  // ─── أحداث الفيديو ───────────────────────────────────────────────────────
-  /**
-   * onLoadStart: بدأ استقبال البيانات → أخفِ الـ Loader
-   * يعني السيرفر اصطاد .m3u8 وFFmpeg يُرسل البيانات
-   */
+  // ─── أحداث الفيديو والتحكم المخصص ───────────────────────────────────────
   const handleVideoLoadStart = () => {
     setIsLoadingStream(false);
     setHasError(false);
@@ -218,11 +295,7 @@ export default function HomePage() {
     if (wrapper) wrapper.classList.add('streaming');
   };
 
-  /**
-   * onError: فشل البث
-   */
   const handleVideoError = () => {
-    // تجنب الخطأ الزائف عند تفريغ الـ src
     const video = videoRef.current;
     if (!video || !video.src || video.src === window.location.href) return;
 
@@ -233,12 +306,81 @@ export default function HomePage() {
     if (wrapper) wrapper.classList.remove('streaming');
   };
 
-  /**
-   * onPlaying: الفيديو يُعرض فعلاً
-   */
   const handleVideoPlaying = () => {
     setIsLoadingStream(false);
     setHasError(false);
+    setIsPlaying(true);
+    resetControlsTimeout();
+  };
+
+  const handlePlayPause = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play().then(() => setIsPlaying(true)).catch(() => {});
+    } else {
+      video.pause();
+      setIsPlaying(false);
+    }
+    resetControlsTimeout();
+  }, [resetControlsTimeout]);
+
+  const handleMuteToggle = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+    setIsMuted(video.muted);
+    setVolume(video.muted ? 0 : (video.volume || 0.5));
+    resetControlsTimeout();
+  }, [resetControlsTimeout]);
+
+  const handleVolumeChange = useCallback((e) => {
+    const val = parseFloat(e.target.value);
+    const video = videoRef.current;
+    if (!video) return;
+    video.volume = val;
+    setVolume(val);
+    video.muted = (val === 0);
+    setIsMuted(val === 0);
+    resetControlsTimeout();
+  }, [resetControlsTimeout]);
+
+  const handleFullscreenToggle = useCallback(() => {
+    const wrapper = document.getElementById('video-wrapper');
+    if (!wrapper) return;
+    if (!document.fullscreenElement) {
+      wrapper.requestFullscreen().then(() => setIsFullscreen(true)).catch((err) => {
+        console.error('Error entering fullscreen:', err);
+      });
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+    resetControlsTimeout();
+  }, [resetControlsTimeout]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  const handlePlayEvent = () => {
+    setIsPlaying(true);
+    resetControlsTimeout();
+  };
+
+  const handlePauseEvent = () => {
+    setIsPlaying(false);
+    setShowControls(true);
+  };
+
+  const handleVolumeChangeEvent = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    setIsMuted(video.muted);
+    setVolume(video.muted ? 0 : video.volume);
   };
 
   /**
@@ -311,15 +453,9 @@ export default function HomePage() {
               </div>
 
               {/* ─── عنصر الفيديو الرئيسي (HTML5 Video) ─────────────── */}
-              {/*
-                 src يُضبَط ديناميكياً عند الضغط على "شاهد الآن"
-                 يشير إلى /api/stream?url=<targetSiteUrl>
-                 السيرفر يُعيد Fragmented MP4 stream مباشرة
-              */}
               <video
                 ref={videoRef}
                 id="main-video"
-                controls
                 autoPlay
                 muted
                 playsInline
@@ -332,13 +468,120 @@ export default function HomePage() {
                 onLoadStart={handleVideoLoadStart}
                 onError={handleVideoError}
                 onPlaying={handleVideoPlaying}
+                onPlay={handlePlayEvent}
+                onPause={handlePauseEvent}
+                onVolumeChange={handleVolumeChangeEvent}
+                onClick={handlePlayPause}
+                onDoubleClick={handleFullscreenToggle}
                 aria-label={
                   currentMatch
                     ? `يتم بث مباراة ${currentMatch.homeTeam} ضد ${currentMatch.awayTeam}`
                     : 'مشغل الفيديو'
                 }
               />
+
+              {/* زر تشغيل مركزي مخصص عند الإيقاف المؤقت */}
+              {currentMatch && !isLoadingStream && !hasError && !isPlaying && (
+                <button
+                  className="video-center-btn"
+                  onClick={handlePlayPause}
+                  aria-label="تشغيل"
+                >
+                  <span className="play-icon">▶</span>
+                </button>
+              )}
+
+              {/* شريط التحكم المخصص السفلي */}
+              {currentMatch && !isLoadingStream && !hasError && (
+                <div className={`video-controls-bar ${showControls ? 'visible' : ''}`}>
+                  {/* اليسار: أزرار التحكم والتشغيل والصوت */}
+                  <div className="controls-left">
+                    <button
+                      className="control-btn play-pause-btn"
+                      onClick={handlePlayPause}
+                      aria-label={isPlaying ? "إيقاف مؤقت" : "تشغيل"}
+                    >
+                      {isPlaying ? '⏸' : '▶'}
+                    </button>
+
+                    <div className="volume-control-group">
+                      <button
+                        className="control-btn mute-btn"
+                        onClick={handleMuteToggle}
+                        aria-label={isMuted ? "إلغاء كتم الصوت" : "كتم الصوت"}
+                      >
+                        {isMuted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
+                      </button>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={volume}
+                        onChange={handleVolumeChange}
+                        className="volume-slider"
+                        aria-label="مستوى الصوت"
+                      />
+                    </div>
+                  </div>
+
+                  {/* الوسط: اسم المباراة وبادج البث المباشر */}
+                  <div className="controls-center">
+                    <span className="controls-live-badge">
+                      <span className="controls-live-dot" />
+                      مباشر
+                    </span>
+                    <span className="controls-match-title">
+                      {currentMatch.homeTeam} vs {currentMatch.awayTeam}
+                    </span>
+                  </div>
+
+                  {/* اليمين: ملء الشاشة والـ PIP */}
+                  <div className="controls-right">
+                    <button
+                      className="control-btn pip-btn"
+                      onClick={() => {
+                        const video = videoRef.current;
+                        if (!video) return;
+                        if (document.pictureInPictureElement) {
+                          document.exitPictureInPicture();
+                        } else if (video.requestPictureInPicture) {
+                          video.requestPictureInPicture();
+                        }
+                      }}
+                      aria-label="صورة داخل صورة"
+                    >
+                      📺
+                    </button>
+                    <button
+                      className="control-btn fullscreen-btn"
+                      onClick={handleFullscreenToggle}
+                      aria-label={isFullscreen ? "خروج من ملء الشاشة" : "ملء الشاشة"}
+                    >
+                      {isFullscreen ? '⏹' : '⛶'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* أزرار السيرفرات (Servers Selector) */}
+            {currentMatch && (
+              <div className="server-selector-container">
+                <span className="server-label">سيرفرات البث:</span>
+                <div className="server-buttons">
+                  {getServers(currentMatch).map((url, idx) => (
+                    <button
+                      key={idx}
+                      className={`server-btn ${activeServerIndex === idx ? 'active' : ''}`}
+                      onClick={() => playStream(currentMatch, url, idx)}
+                    >
+                      📺 سيرفر {idx + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ─── Now Playing Bar ─────────────────────────────────────────── */}
