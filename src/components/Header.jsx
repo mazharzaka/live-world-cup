@@ -1,14 +1,26 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useGetScheduleQuery } from '../store/streamApi';
+import { Search } from 'lucide-react';
+import { useState } from 'react';
 
 export default function Header() {
   const pathname = usePathname();
   const { data } = useGetScheduleQuery();
   const matches = data || [];
   const liveCount = matches.filter((m) => m.isLive).length;
+  
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
 
   return (
     <nav className="navbar" role="navigation" aria-label="شريط التنقل الرئيسي">
@@ -83,7 +95,26 @@ export default function Header() {
         </Link>
       </div>
 
-      <div className="navbar-meta" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center', background: 'var(--clr-bg)', borderRadius: 'var(--radius-full)', padding: '4px 12px', border: '1px solid var(--clr-border)' }}>
+        <Search size={16} color="var(--clr-text-dim)" />
+        <input 
+          type="text" 
+          placeholder="ابحث عن فيلم..." 
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--clr-text)',
+            outline: 'none',
+            padding: '4px 8px',
+            fontSize: '14px',
+            width: '180px'
+          }}
+        />
+      </form>
+
+      <div className="navbar-meta" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginRight: '16px' }}>
         {liveCount > 0 && (
           <div className="live-indicator" role="status" aria-live="polite">
             <span className="live-dot" aria-hidden="true" />

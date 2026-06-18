@@ -98,21 +98,26 @@ function WatchContent() {
     setIsLoading(true);
     setError(null);
     try {
-      // 1. جلب قائمة الأفلام من السيرفر لمطابقة المعرّف واستخراج الـ targetUrl الأصلي
-      const listResponse = await fetch(listApiUrl);
-      if (!listResponse.ok) {
-        throw new Error("فشل الوصول إلى قائمة الأفلام من الخادم.");
-      }
-      const movieList = await listResponse.json();
-      const movie = movieList.find((m) => m.id === id);
+      let url = searchParams.get("targetUrl");
 
-      if (!movie || !movie.targetUrl) {
-        throw new Error(
-          "لم يتم العثور على الفيلم المطلوب أو الرابط المرجعي له.",
-        );
+      // إذا لم يكن targetUrl موجوداً في الرابط (للأفلام القديمة)، نبحث عنه في القوائم
+      if (!url) {
+        const listResponse = await fetch(listApiUrl);
+        if (!listResponse.ok) {
+          throw new Error("فشل الوصول إلى قائمة الأفلام من الخادم.");
+        }
+        const movieList = await listResponse.json();
+        const movie = movieList.find((m) => m.id === id);
+
+        if (!movie || !movie.targetUrl) {
+          throw new Error(
+            "لم يتم العثور على الفيلم المطلوب أو الرابط المرجعي له.",
+          );
+        }
+        url = movie.targetUrl;
       }
-      console.log("Found movie:", movie.targetUrl + "/watch");
-      const url = movie.targetUrl; // سيقوم السيرفر بالتنظيف وإلحاق /watch تلقائياً
+
+      console.log("Found movie:", url + "/watch");
 
       // 2. جلب سيرفر البث المباشر النظيف باستخدام الـ targetUrl الأصلي
       const apiUrl = `http://localhost:3001/api/media/stream?targetUrl=${encodeURIComponent(url)}`;

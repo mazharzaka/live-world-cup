@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Play } from 'lucide-react';
 
 export default function MovieCard({ id, title, poster, targetUrl }) {
-  const watchUrl = `/watch?id=${id}&title=${encodeURIComponent(title)}`;
+  const watchUrl = `/watch?id=${id}&title=${encodeURIComponent(title)}&targetUrl=${encodeURIComponent(targetUrl)}`;
 
   return (
     <Link href={watchUrl} style={{ textDecoration: 'none', display: 'block' }}>
@@ -20,6 +20,7 @@ export default function MovieCard({ id, title, poster, targetUrl }) {
         <motion.img
           src={poster}
           alt={title}
+          referrerPolicy="no-referrer"
           className="movie-card-poster"
           variants={{
             rest: { scale: 1 },

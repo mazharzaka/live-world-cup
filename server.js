@@ -134,7 +134,7 @@ async function movieSniffer() {
   );
 
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: false,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -162,7 +162,7 @@ async function movieSniffer() {
       type: "direct_menu_site",
       source: "arabsid",
       searchKey: "عرب سيد",
-      fallbackBase: "https://wecima.cx/category/arabic-movies",
+      fallbackBase: "https://vid.mycima.cc/categories-cimawbas.php?cat=5-cimawbas-aflam-3arby",
     },
     // {
     //   type: "google_search",
@@ -208,7 +208,7 @@ async function movieSniffer() {
             }, task.source);
 
             baseUrl = baseUrl || task.fallbackBase;
-            const isCategoryPage = baseUrl.includes("/category/");
+            const isCategoryPage = baseUrl.includes("/category/") || baseUrl.includes("/list/") || baseUrl.includes("categories-cimawbas") || baseUrl.includes("aflam-3arby");
 
             await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
             await new Promise((r) => setTimeout(r, 2000));
@@ -267,7 +267,7 @@ async function movieSniffer() {
             });
 
             if (isCategoryPage || Object.keys(mappedSections).length === 0) {
-              if (task.fallbackBase.includes("category/arabic-movies") || task.fallbackBase.includes("arabic-movies")) {
+              if (task.fallbackBase.includes("category/arabic-movies") || task.fallbackBase.includes("arabic-movies") || task.fallbackBase.includes("aflam-3arby")) {
                 if (!mappedSections["arabicMovies"]) {
                   mappedSections["arabicMovies"] = baseUrl;
                 }
@@ -284,8 +284,10 @@ async function movieSniffer() {
               await page.goto(sectionUrl, { waitUntil: "domcontentloaded" });
 
               await page.evaluate(async () => {
-                window.scrollBy(0, 1000);
-                await new Promise((r) => setTimeout(r, 1500));
+                for (let i = 0; i < 5; i++) {
+                  window.scrollBy(0, 600);
+                  await new Promise((r) => setTimeout(r, 400));
+                }
               });
 
               const extracted = await page.evaluate(() => {
@@ -310,14 +312,40 @@ async function movieSniffer() {
                   )
                     return;
 
-                  const imgEl =
-                    card.tagName === "IMG" ? card : card.querySelector("img");
-                  if (!imgEl) return;
+                  let posterUrl = "";
+                  
+                  const imgEl = card.tagName === "IMG" ? card : card.querySelector("img");
+                  if (imgEl) {
+                    posterUrl = imgEl.getAttribute("data-src") || imgEl.getAttribute("data-lazy-src") || imgEl.getAttribute("data-lazy-style") || imgEl.src;
+                  }
 
-                  const posterUrl =
-                    imgEl.getAttribute("data-src") ||
-                    imgEl.getAttribute("data-lazy-src") ||
-                    imgEl.src;
+                  if (!posterUrl || posterUrl.includes("melody-lzld")) {
+                    const bgSpan = card.querySelector('[data-lazy-style], [style*="background-image"]');
+                    if (bgSpan) {
+                      const styleStr = bgSpan.getAttribute("data-lazy-style") || bgSpan.getAttribute("style");
+                      const match = styleStr.match(/url\(['"]?(.*?)['"]?\)/);
+                      if (match && match[1]) {
+                        posterUrl = match[1];
+                      }
+                    }
+                  }
+
+                  if (!posterUrl || posterUrl.includes("melody-lzld")) {
+                     const allLazy = card.querySelectorAll('[data-lazy-src], [data-src]');
+                     for(let el of allLazy) {
+                         const src = el.getAttribute("data-lazy-src") || el.getAttribute("data-src");
+                         if (src && !src.includes("melody-lzld")) {
+                             posterUrl = src;
+                             break;
+                         }
+                     }
+                  }
+
+                  if (posterUrl && posterUrl.includes("melody-lzld")) {
+                      // Don't drop it, just use a fallback or keep it so we don't lose the movie!
+                      posterUrl = "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
+                  }
+
                   if (
                     !posterUrl ||
                     posterUrl.includes("logo") ||
@@ -352,14 +380,18 @@ async function movieSniffer() {
                   .replace(/مترجم/g, "")
                   .replace(/اون لاين/g, "")
                   .trim();
+                let targetLink = item.link;
+                if (targetLink.includes("mycima") && targetLink.includes("watch.php")) {
+                  targetLink = targetLink.replace("watch.php", "play.php");
+                }
                 if (
-                  !scrapedData[key].some((el) => el.targetUrl === item.link)
+                  !scrapedData[key].some((el) => el.targetUrl === targetLink)
                 ) {
                   scrapedData[key].push({
                     id: `${key}-${Math.random().toString(36).substr(2, 5)}`,
                     title: cleanTitle,
                     poster: item.poster,
-                    targetUrl: item.link,
+                    targetUrl: targetLink,
                   });
                 }
               });
@@ -514,6 +546,133 @@ app.get("/api/series/english", (req, res) => {
 // تشغيل الفحص فوراً
 movieSniffer();
 
+app.get("/api/search", async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.status(400).json({ error: "Search query required" });
+  
+  try {
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-blink-features=AutomationControlled",
+        "--ignore-certificate-errors",
+        "--window-size=1366,768",
+      ],
+    });
+
+    const results = [];
+    const topCinemaUrl = `https://web.topcinemaa.com/search/?query=${encodeURIComponent(query)}&type=all`;
+    const myCimaUrl = `https://vid.mycima.cc/search.php?keywords=${encodeURIComponent(query)}&video-id=`;
+
+    const tasks = [
+      { url: topCinemaUrl, source: "topcinema", key: "englishMovies" },
+      { url: myCimaUrl, source: "mycima", key: "arabicMovies" }
+    ];
+
+    await Promise.all(tasks.map(async (task) => {
+      let page;
+      try {
+        page = await browser.newPage();
+        await page.setDefaultNavigationTimeout(45000);
+        await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+        
+        try {
+          await page.goto(task.url, { waitUntil: "domcontentloaded", timeout: 15000 });
+        } catch (e) {
+          console.log(`[Search] Navigation timeout for ${task.source}, but continuing with extraction...`);
+        }
+        
+        await page.evaluate(async () => {
+          for (let i = 0; i < 5; i++) {
+            window.scrollBy(0, 600);
+            await new Promise((r) => setTimeout(r, 400));
+          }
+        });
+
+        const extracted = await page.evaluate(() => {
+          const items = [];
+          const cards = document.querySelectorAll('.Small--Box, [class*="movie"], [class*="card"], .pm-video-thumb');
+          cards.forEach((card) => {
+            let validAnchor = card.tagName === "A" ? card : (card.querySelector('a:not([href*="#"])') || card.querySelector("a"));
+            let href = validAnchor?.href;
+            if (!href || !href.startsWith("http")) return;
+
+            let posterUrl = "";
+            const imgEl = card.tagName === "IMG" ? card : card.querySelector("img");
+            if (imgEl) {
+              posterUrl = imgEl.getAttribute("data-src") || imgEl.getAttribute("data-lazy-src") || imgEl.getAttribute("data-echo") || imgEl.getAttribute("data-lazy-style") || imgEl.src;
+            }
+
+            if (!posterUrl || posterUrl.includes("melody-lzld")) {
+              const bgSpan = card.querySelector('[data-lazy-style], [style*="background-image"]');
+              if (bgSpan) {
+                const styleStr = bgSpan.getAttribute("data-lazy-style") || bgSpan.getAttribute("style");
+                const match = styleStr.match(/url\(['"]?(.*?)['"]?\)/);
+                if (match && match[1]) posterUrl = match[1];
+              }
+            }
+
+            if (!posterUrl || posterUrl.includes("melody-lzld")) {
+              const allLazy = card.querySelectorAll('[data-lazy-src], [data-src], [data-echo]');
+              for(let el of allLazy) {
+                const src = el.getAttribute("data-lazy-src") || el.getAttribute("data-src") || el.getAttribute("data-echo");
+                if (src && !src.includes("melody-lzld")) {
+                  posterUrl = src;
+                  break;
+                }
+              }
+            }
+
+            if (posterUrl && posterUrl.includes("melody-lzld")) {
+                posterUrl = "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
+            }
+
+            if (!posterUrl || posterUrl.includes("logo") || posterUrl.includes("blank") || posterUrl.includes("cover.jpg")) return;
+
+            const titleEl = card.querySelector("h3") || card.querySelector(".title");
+            const titleText = titleEl ? titleEl.innerText.trim() : (imgEl?.getAttribute("alt") || "").trim();
+
+            if (titleText && titleText.length > 2) {
+              if (!items.some(i => i.link === href)) {
+                items.push({ title: titleText, poster: posterUrl, link: href });
+              }
+            }
+          });
+          return items;
+        });
+
+        extracted.forEach((item) => {
+          let cleanTitle = item.title.replace(/مشاهدة/g, "").replace(/فيلم/g, "").replace(/مسلسل/g, "").replace(/مترجم/g, "").replace(/اون لاين/g, "").trim();
+          let targetLink = item.link;
+          if (targetLink.includes("mycima") && targetLink.includes("watch.php")) {
+            targetLink = targetLink.replace("watch.php", "play.php");
+          }
+          if (!results.some(r => r.targetUrl === targetLink)) {
+            results.push({
+              id: `${task.key}-${Math.random().toString(36).substr(2, 5)}`,
+              title: cleanTitle,
+              poster: item.poster,
+              targetUrl: targetLink
+            });
+          }
+        });
+      } catch (err) {
+        console.error(`❌ Search error on ${task.source}:`, err.message);
+      } finally {
+        if (page) await page.close();
+      }
+    }));
+
+    await browser.close();
+    res.json(results);
+  } catch (err) {
+    console.error("Search API Error:", err);
+    res.status(500).json({ error: "Internal Search Error" });
+  }
+});
+
 // Endpoint للأفلام
 app.get("/api/movies", (req, res) => res.json(scrapedMovies));
 
@@ -650,8 +809,12 @@ async function getOrSniffStream(url) {
   }
   
   if (caughtStream) {
-    const isDirect = caughtStream.includes(".m3u8") || caughtStream.includes(".mp4") || caughtStream.includes(".ts");
-    const type = isDirect ? "direct" : "iframe";
+    let type = "iframe";
+    if (caughtStream.includes(".m3u8") || caughtStream.includes("urlset")) {
+      type = "hls";
+    } else if (caughtStream.includes(".mp4") || caughtStream.includes(".ts")) {
+      type = "direct";
+    }
     const data = {
       streamUrl: caughtStream,
       type,
