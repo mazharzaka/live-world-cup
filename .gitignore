@@ -1,6 +1,11 @@
+# dependencies
 node_modules/
+
+# environment variables
 .env
-*.log
+.env*.local
+
+# Next.js build output
 .next/
 out/
 build/
