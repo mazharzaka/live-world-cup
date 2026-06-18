@@ -394,7 +394,22 @@ export default function HomePage() {
 
         {/* ─── Player Area (يسار) ─────────────────────────────────────── */}
         <section className="player-area" aria-label="مشغل البث">
-
+  {currentMatch && (
+              <div className="server-selector-container">
+                <span className="server-label">سيرفرات البث:</span>
+                <div className="server-buttons">
+                  {getServers(currentMatch).map((url, idx) => (
+                    <button
+                      key={idx}
+                      className={`server-btn ${activeServerIndex === idx ? 'active' : ''}`}
+                      onClick={() => playStream(currentMatch, url, idx)}
+                    >
+                      📺 سيرفر {idx + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           {/* ─── Video Wrapper ──────────────────────────────────────────── */}
           <div className="video-container">
             <div className="video-wrapper" id="video-wrapper">
@@ -566,22 +581,7 @@ export default function HomePage() {
             </div>
 
             {/* أزرار السيرفرات (Servers Selector) */}
-            {currentMatch && (
-              <div className="server-selector-container">
-                <span className="server-label">سيرفرات البث:</span>
-                <div className="server-buttons">
-                  {getServers(currentMatch).map((url, idx) => (
-                    <button
-                      key={idx}
-                      className={`server-btn ${activeServerIndex === idx ? 'active' : ''}`}
-                      onClick={() => playStream(currentMatch, url, idx)}
-                    >
-                      📺 سيرفر {idx + 1}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+          
           </div>
 
           {/* ─── Now Playing Bar ─────────────────────────────────────────── */}
