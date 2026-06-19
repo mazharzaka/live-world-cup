@@ -7,6 +7,7 @@ const Match = require("./src/models/Match");
 
 // Connect to MongoDB
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/stream-hunter";
+mongoose.set("bufferCommands", false); // Disable command buffering so disconnected queries fail fast instead of hanging
 mongoose.connect(MONGODB_URI)
   .then(() => console.log("🔌 Connected to MongoDB Successfully!"))
   .catch((err) => console.error("❌ MongoDB Connection Error:", err));
@@ -576,6 +577,10 @@ async function movieSniffer() {
 }
 
 async function fetchCategoryFromDB(category) {
+  if (mongoose.connection.readyState !== 1) {
+    console.log(`⚠️ [DB] Skip loading category ${category} because database is not connected (state: ${mongoose.connection.readyState})`);
+    return;
+  }
   try {
     const items = await Media.find({ category });
     if (items && items.length > 0) {
@@ -1476,33 +1481,39 @@ async function runHourlyCronJob() {
 async function initializeStartup() {
   console.log("🚀 Restoring cache from DB on startup...");
   
-  // استعادة مباريات اليوم من قاعدة البيانات لتجنب البيانات الوهمية
-  try {
-    const cachedMatches = await Match.find({});
-    if (cachedMatches && cachedMatches.length > 0) {
-      scrapedMatches = cachedMatches.map(c => ({
-        id: c.matchId,
-        teamA: c.teamA,
-        teamB: c.teamB,
-        isLive: c.isLive,
-        time: c.time,
-        targetSiteUrl: c.targetSiteUrl,
-        alternativeUrls: c.alternativeUrls,
-      }));
-      console.log(`🔌 [DB] Loaded ${scrapedMatches.length} cached matches from database.`);
-    } else {
-      console.log("🔄 No cached matches in DB, loading fallback...");
+  if (mongoose.connection.readyState === 1) {
+    // استعادة مباريات اليوم من قاعدة البيانات لتجنب البيانات الوهمية
+    try {
+      const cachedMatches = await Match.find({});
+      if (cachedMatches && cachedMatches.length > 0) {
+        scrapedMatches = cachedMatches.map(c => ({
+          id: c.matchId,
+          teamA: c.teamA,
+          teamB: c.teamB,
+          isLive: c.isLive,
+          time: c.time,
+          targetSiteUrl: c.targetSiteUrl,
+          alternativeUrls: c.alternativeUrls,
+        }));
+        console.log(`🔌 [DB] Loaded ${scrapedMatches.length} cached matches from database.`);
+      } else {
+        console.log("🔄 No cached matches in DB, loading fallback...");
+        loadFallback();
+      }
+    } catch (err) {
+      console.error("❌ [DB] Error loading matches on startup:", err.message);
       loadFallback();
     }
-  } catch (err) {
-    console.error("❌ [DB] Error loading matches on startup:", err.message);
+
+    const categories = ["arabicMovies", "englishMovies", "arabicSeries", "englishSeries"];
+    for (const cat of categories) {
+      await fetchCategoryFromDB(cat);
+    }
+  } else {
+    console.log(`⚠️ [DB] MongoDB not connected yet (state: ${mongoose.connection.readyState}). Skipping cache restore, loading fallback matches.`);
     loadFallback();
   }
-
-  const categories = ["arabicMovies", "englishMovies", "arabicSeries", "englishSeries"];
-  for (const cat of categories) {
-    await fetchCategoryFromDB(cat);
-  }
+  
   console.log("🚀 Starting initial movie scraping and sniffing job...");
   runHourlyCronJob().catch(err => console.error("Error running initial cron job:", err));
 }
