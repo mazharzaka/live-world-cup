@@ -145,17 +145,24 @@ async function movieSniffer() {
     "🚀 [⚡ Ultimate Parallel Scraper] تشغيل توب سينما الديناميكي وجوجل المرن للعربي بالتوازي...",
   );
 
+  console.log("🚀 [Ultimate Scraper] Launching Puppeteer browser...");
   const browser = await puppeteer.launch({
     headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-zygote",
+      "--single-process",
+      "--disable-extensions",
       "--disable-blink-features=AutomationControlled",
       "--ignore-certificate-errors",
       "--window-size=1366,768",
     ],
   });
+  console.log("🚀 [Ultimate Scraper] Puppeteer browser launched successfully!");
 
   scrapedData = {
     arabicMovies: [],
@@ -190,12 +197,15 @@ async function movieSniffer() {
   try {
     await Promise.all(
       tasks.map(async (task) => {
+        console.log(`🚀 [Ultimate Scraper] Opening new page for task: ${task.source}`);
         const page = await browser.newPage();
+        console.log(`🚀 [Ultimate Scraper] Page opened for task: ${task.source}. Setting viewport, timeout, and user agent...`);
         await page.setViewport({ width: 1366, height: 768 });
         await page.setDefaultNavigationTimeout(60000);
         await page.setUserAgent(
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
         );
+        console.log(`🚀 [Ultimate Scraper] Page configured for task: ${task.source}`);
 
         // 👑 المسار الأول: توب سينما للأجنبي بالمنيو الديناميكي (شغال الله ينور)
         if (task.type === "direct_menu_site") {
@@ -564,17 +574,24 @@ app.get("/api/search", async (req, res) => {
   if (!query) return res.status(400).json({ error: "Search query required" });
   
   try {
+    console.log(`🔍 [Search API] Launching Puppeteer browser for query: "${query}"...`);
     const browser = await puppeteer.launch({
       headless: true,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-zygote",
+        "--single-process",
+        "--disable-extensions",
         "--disable-blink-features=AutomationControlled",
         "--ignore-certificate-errors",
         "--window-size=1366,768",
       ],
     });
+    console.log("🔍 [Search API] Puppeteer browser launched successfully!");
 
     const results = [];
     const topCinemaUrl = `https://web.topcinemaa.com/search/?query=${encodeURIComponent(query)}&type=all`;
@@ -588,14 +605,18 @@ app.get("/api/search", async (req, res) => {
     await Promise.all(tasks.map(async (task) => {
       let page;
       try {
+        console.log(`🔍 [Search API] Opening new page for source: ${task.source}`);
         page = await browser.newPage();
+        console.log(`🔍 [Search API] Page opened for: ${task.source}`);
         await page.setDefaultNavigationTimeout(45000);
-        await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+        await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
         
         try {
+          console.log(`🔍 [Search API] Navigating ${task.source} to: ${task.url}`);
           await page.goto(task.url, { waitUntil: "domcontentloaded", timeout: 15000 });
+          console.log(`🔍 [Search API] Navigation completed for ${task.source}`);
         } catch (e) {
-          console.log(`[Search] Navigation timeout for ${task.source}, but continuing with extraction...`);
+          console.log(`⚠️ [Search API] Navigation timeout/error for ${task.source}: ${e.message}, but continuing with extraction...`);
         }
         
         await page.evaluate(async () => {
@@ -708,17 +729,24 @@ async function getOrSniffStream(url) {
   
   console.log(`🔍 [Cache Miss] Sniffing stream for: ${cleanUrl}`);
   // Launch Puppeteer to resolve the stream URL
+  console.log(`🔍 [Sniffer] Launching Puppeteer browser for stream: ${cleanUrl}...`);
   const browser = await puppeteer.launch({
     headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-zygote",
+      "--single-process",
+      "--disable-extensions",
       "--disable-blink-features=AutomationControlled",
       "--disable-features=IsolateOrigins,site-per-process",
       "--ignore-certificate-errors",
     ],
   });
+  console.log("🔍 [Sniffer] Puppeteer browser launched successfully!");
   
   let caughtStream = null;
   let fallbackEmbedUrl = null;
@@ -728,10 +756,13 @@ async function getOrSniffStream(url) {
   });
   
   try {
+    console.log(`🔍 [Sniffer] Opening new page...`);
     const page = await browser.newPage();
+    console.log("🔍 [Sniffer] Page opened. Configuring viewport and user agent...");
     await page.setViewport({ width: 1366, height: 768 });
-    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
     
+    console.log("🔍 [Sniffer] Intercepting network requests...");
     await page.setRequestInterception(true);
     page.on("request", (r) => {
       const reqUrl = r.url().toLowerCase();
@@ -848,17 +879,24 @@ async function masterSniffer() {
   console.log("🥷 [Slayer Scraper] بدء عملية الشفط المتوازي والمستقل...");
   let matchesFound = [];
 
+  console.log("🥷 [Slayer Scraper] Launching Puppeteer browser for masterSniffer...");
   const browser = await puppeteer.launch({
     headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-zygote",
+      "--single-process",
+      "--disable-extensions",
       "--disable-blink-features=AutomationControlled",
       "--disable-features=IsolateOrigins,site-per-process",
       "--ignore-certificate-errors",
     ],
   });
+  console.log("🥷 [Slayer Scraper] Puppeteer browser launched successfully!");
 
   const REAL_LIVE_TARGETS = [
     "https://www.kooracity.com",
@@ -876,13 +914,16 @@ async function masterSniffer() {
       console.log(`🎯 جاري فتح متصفح مستقل لـ: ${url}`);
 
       // 🆕 التكتيك السحري: فتح صفحة جديدة لكل موقع لمنع تداخل الكاش والحجب
+      console.log(`🎯 [Slayer Scraper] Opening page for: ${url}`);
       page = await browser.newPage();
+      console.log(`🎯 [Slayer Scraper] Page opened for ${url}. Setting timeout and user-agent...`);
       await page.setDefaultNavigationTimeout(35000);
       await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
       );
 
       // الدخول للموقع
+      console.log(`🎯 [Slayer Scraper] Navigating to: ${url}`);
       await page.goto(url, { waitUntil: "domcontentloaded" });
       await new Promise((r) => setTimeout(r, 4000)); // وقت لاستقرار الجدول
       // console.log(await page.content());
