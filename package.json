@@ -5,10 +5,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npx puppeteer browsers install chrome && next build",
+    "build": "npx puppeteer browsers install chrome-headless-shell && next build",
     "start": "next start",
     "lint": "next lint",
-    "server": "nodemon server.js"
+    "server": "nodemon server.js",
+    "postinstall": "npx puppeteer browsers install chrome-headless-shell"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",
