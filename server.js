@@ -101,19 +101,21 @@ const MOVIE_TARGETS = [
   "https://web.topcinemaa.com/",
 ];
 
-async function movieSniffer() {
+async function movieSnifferOld() {
   console.log("🎬 [Movie Scraper] بدء شفط السينما الذكي (بدون كلاسات)...");
   let moviesFound = [];
 
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: 'shell',
     args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-blink-features=AutomationControlled",
-      "--ignore-certificate-errors", // عشان ننسى حوار شهادات الأمان تماماً
-      "--ignore-ssl-errors=yes",
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-extensions',
+      '--ignore-certificate-errors',
+      '--ignore-ssl-errors=yes',
+      '--blink-settings=imagesEnabled=false'
     ],
   });
 
@@ -147,19 +149,16 @@ async function movieSniffer() {
 
   console.log("🚀 [Ultimate Scraper] Launching Puppeteer browser...");
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: 'shell',
     args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--no-first-run",
-      "--no-zygote",
-      "--single-process",
-      "--disable-extensions",
-      "--disable-blink-features=AutomationControlled",
-      "--ignore-certificate-errors",
-      "--window-size=1366,768",
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-extensions',
+      '--ignore-certificate-errors',
+      '--ignore-ssl-errors=yes',
+      '--blink-settings=imagesEnabled=false'
     ],
   });
   console.log("🚀 [Ultimate Scraper] Puppeteer browser launched successfully!");
@@ -201,7 +200,7 @@ async function movieSniffer() {
         const page = await browser.newPage();
         console.log(`🚀 [Ultimate Scraper] Page opened for task: ${task.source}. Setting viewport, timeout, and user agent...`);
         await page.setViewport({ width: 1366, height: 768 });
-        await page.setDefaultNavigationTimeout(60000);
+        await page.setDefaultNavigationTimeout(30000);
         await page.setUserAgent(
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
         );
@@ -211,10 +210,12 @@ async function movieSniffer() {
         if (task.type === "direct_menu_site") {
           try {
             console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قنص النطاق الحي من جوجل...`);
+            console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to Google search...`);
             await page.goto(
               `https://www.google.com/search?q=${encodeURIComponent(task.searchKey)}`,
-              { waitUntil: "domcontentloaded" },
+              { waitUntil: "domcontentloaded", timeout: 30000 },
             );
+            console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Google search page loaded.`);
 
             let baseUrl = await page.evaluate((key) => {
               const searchLinks = document.querySelectorAll("#search a");
@@ -233,7 +234,9 @@ async function movieSniffer() {
             baseUrl = baseUrl || task.fallbackBase;
             const isCategoryPage = baseUrl.includes("/category/") || baseUrl.includes("/list/") || baseUrl.includes("categories-cimawbas") || baseUrl.includes("aflam-3arby");
 
-            await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+            console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to base URL: ${baseUrl}`);
+            await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+            console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Base URL loaded. Waiting 2 seconds...`);
             await new Promise((r) => setTimeout(r, 2000));
 
             const mappedSections = await page.evaluate(() => {
@@ -304,7 +307,9 @@ async function movieSniffer() {
             for (let key in mappedSections) {
               const sectionUrl = mappedSections[key];
               console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قشط القسم [${key}] من الرابط: ${sectionUrl}`);
-              await page.goto(sectionUrl, { waitUntil: "domcontentloaded" });
+              console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to section URL: ${sectionUrl}`);
+              await page.goto(sectionUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+              console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Section URL loaded. Scrolling...`);
 
               await page.evaluate(async () => {
                 for (let i = 0; i < 5; i++) {
@@ -573,22 +578,20 @@ app.get("/api/search", async (req, res) => {
   const query = req.query.q;
   if (!query) return res.status(400).json({ error: "Search query required" });
   
+  let browser;
   try {
-    console.log(`🔍 [Search API] Launching Puppeteer browser for query: "${query}"...`);
-    const browser = await puppeteer.launch({
-      headless: true,
+    console.log(`🔍 [Search API] Launching Puppeteer browser in 'shell' headless mode for query: "${query}"...`);
+    browser = await puppeteer.launch({
+      headless: 'shell',
       args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--no-first-run",
-        "--no-zygote",
-        "--single-process",
-        "--disable-extensions",
-        "--disable-blink-features=AutomationControlled",
-        "--ignore-certificate-errors",
-        "--window-size=1366,768",
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--ignore-certificate-errors',
+        '--ignore-ssl-errors=yes',
+        '--blink-settings=imagesEnabled=false'
       ],
     });
     console.log("🔍 [Search API] Puppeteer browser launched successfully!");
@@ -607,24 +610,25 @@ app.get("/api/search", async (req, res) => {
       try {
         console.log(`🔍 [Search API] Opening new page for source: ${task.source}`);
         page = await browser.newPage();
-        console.log(`🔍 [Search API] Page opened for: ${task.source}`);
-        await page.setDefaultNavigationTimeout(45000);
+        await page.setDefaultNavigationTimeout(30000);
         await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
         
         try {
           console.log(`🔍 [Search API] Navigating ${task.source} to: ${task.url}`);
-          await page.goto(task.url, { waitUntil: "domcontentloaded", timeout: 15000 });
+          await page.goto(task.url, { waitUntil: "domcontentloaded", timeout: 30000 });
           console.log(`🔍 [Search API] Navigation completed for ${task.source}`);
         } catch (e) {
           console.log(`⚠️ [Search API] Navigation timeout/error for ${task.source}: ${e.message}, but continuing with extraction...`);
         }
         
+        console.log(`🔍 [Search API] Scrolling page for ${task.source}...`);
         await page.evaluate(async () => {
           for (let i = 0; i < 5; i++) {
             window.scrollBy(0, 600);
             await new Promise((r) => setTimeout(r, 400));
           }
         });
+        console.log(`🔍 [Search API] Scroll completed for ${task.source}. Evaluating page elements...`);
 
         const extracted = await page.evaluate(() => {
           const items = [];
@@ -678,6 +682,7 @@ app.get("/api/search", async (req, res) => {
           return items;
         });
 
+        console.log(`🔍 [Search API] Extracted ${extracted.length} raw results from ${task.source}`);
         extracted.forEach((item) => {
           let cleanTitle = item.title.replace(/مشاهدة/g, "").replace(/فيلم/g, "").replace(/مسلسل/g, "").replace(/مترجم/g, "").replace(/اون لاين/g, "").trim();
           let targetLink = item.link;
@@ -694,17 +699,35 @@ app.get("/api/search", async (req, res) => {
           }
         });
       } catch (err) {
-        console.error(`❌ Search error on ${task.source}:`, err.message);
+        console.error(`❌ [Search API] Search error on ${task.source}:`, err.message);
       } finally {
-        if (page) await page.close();
+        if (page) {
+          try {
+            console.log(`🔍 [Search API] Closing page for source: ${task.source}`);
+            await page.close();
+          } catch (e) {
+            console.error("Error closing search task page:", e.message);
+          }
+        }
       }
     }));
 
-    await browser.close();
     res.json(results);
   } catch (err) {
     console.error("Search API Error:", err);
-    res.status(500).json({ error: "Internal Search Error" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal Search Error: " + err.message });
+    }
+  } finally {
+    if (browser) {
+      try {
+        console.log("🔍 [Search API] Closing browser...");
+        await browser.close();
+        console.log("🔍 [Search API] Browser closed successfully.");
+      } catch (e) {
+        console.error("Error closing search browser:", e.message);
+      }
+    }
   }
 });
 
@@ -716,11 +739,7 @@ const streamCache = new Map(); // key: watchUrl, value: { streamUrl, type, refer
 
 async function getOrSniffStream(url) {
   if (!url) return null;
-  
-  // Clean URL first
   const cleanUrl = cleanMovieUrl(url);
-  
-  // 1. Check cache (valid for 10 minutes)
   const cached = streamCache.get(cleanUrl);
   if (cached && (Date.now() - cached.timestamp < 10 * 60 * 1000)) {
     console.log(`⚡ [Cache Hit] Stream found in cache for: ${cleanUrl}`);
@@ -728,26 +747,7 @@ async function getOrSniffStream(url) {
   }
   
   console.log(`🔍 [Cache Miss] Sniffing stream for: ${cleanUrl}`);
-  // Launch Puppeteer to resolve the stream URL
-  console.log(`🔍 [Sniffer] Launching Puppeteer browser for stream: ${cleanUrl}...`);
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--no-first-run",
-      "--no-zygote",
-      "--single-process",
-      "--disable-extensions",
-      "--disable-blink-features=AutomationControlled",
-      "--disable-features=IsolateOrigins,site-per-process",
-      "--ignore-certificate-errors",
-    ],
-  });
-  console.log("🔍 [Sniffer] Puppeteer browser launched successfully!");
-  
+  let browser;
   let caughtStream = null;
   let fallbackEmbedUrl = null;
   let resolveStream;
@@ -756,288 +756,266 @@ async function getOrSniffStream(url) {
   });
   
   try {
+    console.log(`🔍 [Sniffer] Launching Puppeteer browser with 'shell' headless mode for: ${cleanUrl}...`);
+    browser = await puppeteer.launch({
+      headless: 'shell',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--ignore-certificate-errors',
+        '--ignore-ssl-errors=yes',
+        '--blink-settings=imagesEnabled=false'
+      ],
+    });
+    console.log("🔍 [Sniffer] Puppeteer browser launched successfully!");
+
     console.log(`🔍 [Sniffer] Opening new page...`);
     const page = await browser.newPage();
-    console.log("🔍 [Sniffer] Page opened. Configuring viewport and user agent...");
     await page.setViewport({ width: 1366, height: 768 });
     await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
     
     console.log("🔍 [Sniffer] Intercepting network requests...");
     await page.setRequestInterception(true);
     page.on("request", (r) => {
-      const reqUrl = r.url().toLowerCase();
-      const cleanTarget = cleanUrl.toLowerCase().replace("://m.", "://");
-      
-      if (reqUrl.includes(cleanTarget) && (r.resourceType() === 'document' || r.resourceType() === 'navigation')) {
-        r.continue();
-        return;
-      }
-      
-      if (
-        reqUrl.includes("popads") ||
-        reqUrl.includes("adsterra") ||
-        reqUrl.includes("analytics") ||
-        reqUrl.includes("doubleclick") ||
-        reqUrl.includes("onclick") ||
-        reqUrl.includes("exoclick")
-      ) {
-        r.abort();
-      } else {
+      try {
+        const reqUrl = r.url().toLowerCase();
+        const cleanTarget = cleanUrl.toLowerCase().replace("://m.", "://");
+        
+        if (reqUrl.includes(cleanTarget) && (r.resourceType() === 'document' || r.resourceType() === 'navigation')) {
+          r.continue().catch(() => {});
+          return;
+        }
+        
+        if (
+          reqUrl.includes("popads") ||
+          reqUrl.includes("adsterra") ||
+          reqUrl.includes("analytics") ||
+          reqUrl.includes("doubleclick") ||
+          reqUrl.includes("onclick") ||
+          reqUrl.includes("exoclick")
+        ) {
+          r.abort().catch(() => {});
+          return;
+        }
+        
         if ((reqUrl.includes(".m3u8") || reqUrl.includes(".mp4") || reqUrl.includes(".ts")) && !caughtStream) {
           if (!reqUrl.includes("google") && !reqUrl.includes("facebook")) {
             caughtStream = r.url();
             resolveStream(caughtStream);
           }
         }
-        r.continue();
+        r.continue().catch(() => {});
+      } catch (err) {
+        console.error("⚠️ [Sniffer] Interception handler error:", err.message);
       }
     });
     
     try {
-      await Promise.race([
-        page.goto(cleanUrl, { waitUntil: "domcontentloaded", timeout: 15000 }),
-        streamPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000))
-      ]);
-    } catch (e) {
-      console.log(`ℹ️ [Sniffer] Page load timeout: ${e.message}`);
-    }
-    
-    if (!caughtStream) {
-      const hasIframe = await page.$("iframe");
-      if (!hasIframe) {
-        await page.evaluate(() => {
-          const serverButtons = document.querySelectorAll(".servers-list li, .serversNav li, [class*=\"server\"] li, .watch-servers a, .ServersList a");
-          if (serverButtons.length > 0) {
-            serverButtons[0].click();
-          }
-        });
-        await new Promise((r) => setTimeout(r, 3000));
-      }
-      
-      await page.waitForSelector("iframe", { timeout: 5000 });
+      await page.goto(cleanUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
       const embedUrl = await page.evaluate(() => {
         const iframes = Array.from(document.querySelectorAll("iframe"));
         for (let iframe of iframes) {
-          const src = iframe.src || iframe.getAttribute("data-src") || iframe.getAttribute("data-lazy-src");
-          if (src && (src.includes("embed") || src.includes("player") || src.includes("vidtube") || src.includes("asd") || src.includes("arabseed"))) {
-            return src;
-          }
+          const src = iframe.src || iframe.getAttribute("data-src");
+          if (src && (src.includes("embed") || src.includes("player"))) return src;
         }
         return null;
       });
       
       if (embedUrl) {
         fallbackEmbedUrl = embedUrl;
-        await page.goto(embedUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
-        await new Promise((r) => setTimeout(r, 2000));
-        
-        if (!caughtStream) {
-          await page.mouse.click(680, 400);
-        }
-        
+        await page.goto(embedUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
         await Promise.race([
           streamPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout inside embed")), 6000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000))
         ]);
       }
+    } catch (e) {
+      console.log(`ℹ️ [Sniffer] Page load: ${e.message}`);
     }
   } catch (err) {
-    console.error(`❌ Sniffer helper error for ${cleanUrl}:`, err.message);
+    console.error(`❌ Sniffer error:`, err.message);
   } finally {
-    try {
-      await browser.close();
-    } catch (e) {}
+    if (browser) await browser.close();
   }
   
-  if (!caughtStream && fallbackEmbedUrl) {
-    caughtStream = fallbackEmbedUrl;
-  }
-  
-  if (caughtStream) {
-    let type = "iframe";
-    if (caughtStream.includes(".m3u8") || caughtStream.includes("urlset")) {
-      type = "hls";
-    } else if (caughtStream.includes(".mp4") || caughtStream.includes(".ts")) {
-      type = "direct";
-    }
-    const data = {
-      streamUrl: caughtStream,
-      type,
-      referer: cleanUrl,
-      timestamp: Date.now()
-    };
+  const finalStream = caughtStream || fallbackEmbedUrl;
+  if (finalStream) {
+    const data = { streamUrl: finalStream, type: finalStream.includes(".m3u8") ? "hls" : "iframe", referer: cleanUrl, timestamp: Date.now() };
     streamCache.set(cleanUrl, data);
-    console.log(`🎯 [Sniffer success] Cached stream for: ${cleanUrl} -> ${caughtStream}`);
     return data;
   }
-  
   return null;
 }
 
 async function masterSniffer() {
   console.log("🥷 [Slayer Scraper] بدء عملية الشفط المتوازي والمستقل...");
   let matchesFound = [];
+  let browser;
 
-  console.log("🥷 [Slayer Scraper] Launching Puppeteer browser for masterSniffer...");
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--no-first-run",
-      "--no-zygote",
-      "--single-process",
-      "--disable-extensions",
-      "--disable-blink-features=AutomationControlled",
-      "--disable-features=IsolateOrigins,site-per-process",
-      "--ignore-certificate-errors",
-    ],
-  });
-  console.log("🥷 [Slayer Scraper] Puppeteer browser launched successfully!");
+  try {
+    console.log("🥷 [Slayer Scraper] Launching Puppeteer browser with 'shell' headless mode...");
+    browser = await puppeteer.launch({
+      headless: 'shell',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--ignore-certificate-errors',
+        '--ignore-ssl-errors=yes',
+        '--blink-settings=imagesEnabled=false'
+      ],
+    });
+    console.log("🥷 [Slayer Scraper] Puppeteer browser launched successfully!");
 
-  const REAL_LIVE_TARGETS = [
-    "https://www.kooracity.com",
-    "https://www.yalla-shoot-4u.com",
-    "https://egykoora.com/",
-    "https://live-soccer.tv/",
-    "https://koora-llive.best/",
-    "https://www.freekora.com",
-  ];
+    const REAL_LIVE_TARGETS = [
+      "https://www.kooracity.com",
+      "https://www.yalla-shoot-4u.com",
+      "https://egykoora.com/",
+      "https://live-soccer.tv/",
+      "https://koora-llive.best/",
+      "https://www.freekora.com",
+    ];
 
-  // اللف على المواقع بفتح صفحات مستقلة تماماً
-  for (let url of REAL_LIVE_TARGETS) {
-    let page = null;
-    try {
-      console.log(`🎯 جاري فتح متصفح مستقل لـ: ${url}`);
+    // اللف على المواقع بفتح صفحات مستقلة تماماً
+    for (let url of REAL_LIVE_TARGETS) {
+      let page = null;
+      try {
+        console.log(`🎯 [Slayer Scraper] Opening page for: ${url}`);
+        page = await browser.newPage();
+        console.log(`🎯 [Slayer Scraper] Page opened for ${url}. Setting timeout and user-agent...`);
+        await page.setDefaultNavigationTimeout(30000);
+        await page.setUserAgent(
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        );
 
-      // 🆕 التكتيك السحري: فتح صفحة جديدة لكل موقع لمنع تداخل الكاش والحجب
-      console.log(`🎯 [Slayer Scraper] Opening page for: ${url}`);
-      page = await browser.newPage();
-      console.log(`🎯 [Slayer Scraper] Page opened for ${url}. Setting timeout and user-agent...`);
-      await page.setDefaultNavigationTimeout(35000);
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-      );
+        // الدخول للموقع
+        console.log(`🎯 [Slayer Scraper] Navigating to: ${url}`);
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+        console.log(`🎯 [Slayer Scraper] Navigation completed. Waiting 4 seconds for stabilization...`);
+        await new Promise((r) => setTimeout(r, 4000));
+        
+        console.log(`🎯 [Slayer Scraper] Evaluating match elements on page: ${url}`);
+        const extractedLinks = await page.evaluate(() => {
+          const items = [];
 
-      // الدخول للموقع
-      console.log(`🎯 [Slayer Scraper] Navigating to: ${url}`);
-      await page.goto(url, { waitUntil: "domcontentloaded" });
-      await new Promise((r) => setTimeout(r, 4000)); // وقت لاستقرار الجدول
-      // console.log(await page.content());
-      const extractedLinks = await page.evaluate(() => {
-        const items = [];
+          // 1. استهدف حاويات المباريات المخصصة في هذا السورس
+          const matchCards = document.querySelectorAll(".AY_Match");
 
-        // 1. استهداف حاويات المباريات المخصصة في هذا السورس
-        const matchCards = document.querySelectorAll(".AY_Match");
+          if (matchCards.length > 0) {
+            matchCards.forEach((card) => {
+              // قنص الفريق الأول والثاني من الكلاسات المخصصة
+              const teamAEl = card.querySelector(".TM1 .TM_Name");
+              const teamBEl = card.querySelector(".TM2 .TM_Name");
 
-        if (matchCards.length > 0) {
-          matchCards.forEach((card) => {
-            // قنص الفريق الأول والثاني من الكلاسات المخصصة
-            const teamAEl = card.querySelector(".TM1 .TM_Name");
-            const teamBEl = card.querySelector(".TM2 .TM_Name");
+              // قنص رابط البث الشفاف
+              const linkEl = card.querySelector("a");
 
-            // قنص رابط البث الشفاف
-            const linkEl = card.querySelector("a");
+              if (teamAEl && teamBEl && linkEl) {
+                const teamA = teamAEl.innerText.trim();
+                const teamB = teamBEl.innerText.trim();
+                const href = linkEl.href;
 
-            if (teamAEl && teamBEl && linkEl) {
-              const teamA = teamAEl.innerText.trim();
-              const teamB = teamBEl.innerText.trim();
-              const href = linkEl.href;
+                items.push({
+                  title: `${teamA} 🆚 ${teamB}`,
+                  link: href,
+                });
+              }
+            });
+          }
 
-              items.push({
-                title: `${teamA} 🆚 ${teamB}`,
-                link: href,
-              });
-            }
-          });
-        }
+          // 2. Fallback الكلاسيكي للمواقع التانية لو ملقاش الستركتشر ده
+          if (items.length === 0) {
+            const allLinks = document.querySelectorAll("a");
+            allLinks.forEach((a) => {
+              const text = (a.innerText || "").trim();
+              if (
+                (text.includes("🆚") ||
+                  text.includes("ضد") ||
+                  text.includes("مباراة") ||
+                  text.includes("مباشر") ||
+                  text.includes("جارية") ||
+                  text.includes("الان") ||
+                  text.includes("LIVE")) &&
+                a.href.startsWith("http")
+              ) {
+                items.push({ title: text, link: a.href });
+              }
+            });
+          }
 
-        // 2. Fallback الكلاسيكي للمواقع التانية لو ملقاش الستركتشر ده
-        if (items.length === 0) {
-          const allLinks = document.querySelectorAll("a");
-          allLinks.forEach((a) => {
-            const text = (a.innerText || "").trim();
-            if (
-              (text.includes("🆚") ||
-                text.includes("ضد") ||
-                text.includes("مباراة") ||
-                text.includes("مباشر") ||
-                text.includes("جارية") ||
-                text.includes("الان") ||
-                text.includes("LIVE")) &&
-              a.href.startsWith("http")
-            ) {
-              items.push({ title: text, link: a.href });
-            }
-          });
-        }
-
-        return items;
-      });
-
-      if (extractedLinks.length > 0) {
-        extractedLinks.forEach((item) => {
-          // تنظيف أحرف الـ HTML
-          const cleanTitle = (item.title || "")
-            .replace(/<\/?[^>]+(>|$)/g, "")
-            .trim();
-
-          const { teamA, teamB } = splitMatchTitle(cleanTitle);
-
-          const linkLower = item.link.toLowerCase();
-          const titleLower = cleanTitle.toLowerCase();
-
-          // لو لقط كلمة "مباشر" أو "الآن" أو أي إشارة للبث، نجبر isLive على true والـ time على "لايف 🔴"
-          const isLiveNow =
-            linkLower.includes("live") ||
-            linkLower.includes("watch") ||
-            linkLower.includes("stream") ||
-            titleLower.includes("الآن") ||
-            titleLower.includes("الان") ||
-            titleLower.includes("مباشر") ||
-            titleLower.includes("لايف") ||
-            titleLower.includes("live") ||
-            titleLower.includes("جارية") ||
-            titleLower.includes("جاريه");
-
-          matchesFound.push({
-            id: `sniff-${Math.random().toString(36).substr(2, 5)}`,
-            teamA: teamA,
-            teamB: teamB,
-            isLive: isLiveNow,
-            time: isLiveNow ? "لايف 🔴" : "بعد قليل 🕒",
-            targetSiteUrl: item.link,
-          });
+          return items;
         });
-        console.log(
-          `✅ [نجاح] تم قشط ${extractedLinks.length} رابط من الموقع الحالي: ${url}`,
-        );
-      } else {
-        console.log(
-          `⚠️ الموقع فتح بنجاح ولكن جدول مبارياته فارغ حالياً: ${url}`,
-        );
-      }
-    } catch (err) {
-      console.log(`❌ فشل تحميل ${url}:`, err.message);
-    } finally {
-      // 🆕 قفل الصفحة الحالية فوراً لتوفير الرام قبل الانتقال للموقع التالي
-      if (page) {
-        try {
-          await page.close();
-        } catch (e) {
-          console.log(`⚠️ فشل إغلاق الصفحة لـ ${url}:`, e.message);
+
+        console.log(`🎯 [Slayer Scraper] Extracted ${extractedLinks.length} links from ${url}`);
+        if (extractedLinks.length > 0) {
+          extractedLinks.forEach((item) => {
+            // تنظيف أحرف الـ HTML
+            const cleanTitle = (item.title || "")
+              .replace(/<\/?[^>]+(>|$)/g, "")
+              .trim();
+
+            const { teamA, teamB } = splitMatchTitle(cleanTitle);
+
+            const linkLower = item.link.toLowerCase();
+            const titleLower = cleanTitle.toLowerCase();
+
+            // لو لقط كلمة "مباشر" أو "الآن" أو أي إشارة للبث، نجبر isLive على true والـ time على "لايف 🔴"
+            const isLiveNow =
+              linkLower.includes("live") ||
+              linkLower.includes("watch") ||
+              linkLower.includes("stream") ||
+              titleLower.includes("الآن") ||
+              titleLower.includes("الان") ||
+              titleLower.includes("مباشر") ||
+              titleLower.includes("لايف") ||
+              titleLower.includes("live") ||
+              titleLower.includes("جارية") ||
+              titleLower.includes("جاريه");
+
+            matchesFound.push({
+              id: `sniff-${Math.random().toString(36).substr(2, 5)}`,
+              teamA: teamA,
+              teamB: teamB,
+              isLive: isLiveNow,
+              time: isLiveNow ? "لايف 🔴" : "بعد قليل 🕒",
+              targetSiteUrl: item.link,
+            });
+          });
+          console.log(`✅ [نجاح] تم قشط ${extractedLinks.length} رابط من الموقع الحالي: ${url}`);
+        } else {
+          console.log(`⚠️ الموقع فتح بنجاح ولكن جدول مبارياته فارغ حالياً: ${url}`);
+        }
+      } catch (err) {
+        console.log(`❌ فشل تحميل أو معالجة ${url}:`, err.message);
+      } finally {
+        // 🆕 قفل الصفحة الحالية فوراً لتوفير الرام قبل الانتقال للموقع التالي
+        if (page) {
+          try {
+            console.log(`🎯 [Slayer Scraper] Closing page for: ${url}`);
+            await page.close();
+          } catch (e) {
+            console.log(`⚠️ فشل إغلاق الصفحة لـ ${url}:`, e.message);
+          }
         }
       }
     }
-  }
-
-  try {
-    await browser.close();
-  } catch (e) {
-    console.log("⚠️ فشل إغلاق المتصفح (مباريات):", e.message);
+  } catch (err) {
+    console.log("❌ خطأ عام بالسيرفر في masterSniffer:", err.message);
+  } finally {
+    if (browser) {
+      try {
+        console.log("🥷 [Slayer Scraper] Closing browser...");
+        await browser.close();
+        console.log("🥷 [Slayer Scraper] Browser closed successfully.");
+      } catch (e) {
+        console.log("⚠️ فشل إغلاق المتصفح (مباريات):", e.message);
+      }
+    }
   }
 
   // فلترة وتجميع النهائي
