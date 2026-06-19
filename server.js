@@ -250,6 +250,10 @@ async function movieSniffer() {
 
             console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to base URL: ${baseUrl}`);
             await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+            console.log("📄 Page Title:", await page.title());
+            console.log("🌐 Current URL:", page.url());
+            const bodyHTML = await page.evaluate(() => document.body ? document.body.innerHTML : "");
+            console.log("🔍 First 500 chars of HTML:", bodyHTML.substring(0, 500));
             console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Base URL loaded. Waiting 2 seconds...`);
             await new Promise((r) => setTimeout(r, 2000));
 
@@ -323,6 +327,10 @@ async function movieSniffer() {
               console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قشط القسم [${key}] من الرابط: ${sectionUrl}`);
               console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to section URL: ${sectionUrl}`);
               await page.goto(sectionUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+              console.log("📄 Page Title:", await page.title());
+              console.log("🌐 Current URL:", page.url());
+              const bodyHTML = await page.evaluate(() => document.body ? document.body.innerHTML : "");
+              console.log("🔍 First 500 chars of HTML:", bodyHTML.substring(0, 500));
               console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Section URL loaded. Scrolling...`);
 
               await page.evaluate(async () => {
@@ -413,6 +421,7 @@ async function movieSniffer() {
                 });
                 return items;
               });
+              console.log(`🔍 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Element selection results count: ${extracted.length}`);
 
               extracted.forEach((item) => {
                 let cleanTitle = item.title
@@ -463,6 +472,10 @@ async function movieSniffer() {
                 `https://www.google.com/search?q=${encodeURIComponent(task.queries[key])}`,
                 { waitUntil: "domcontentloaded" },
               );
+              console.log("📄 Google Search Page Title:", await page.title());
+              console.log("🌐 Google Search Current URL:", page.url());
+              const bodyHTML = await page.evaluate(() => document.body ? document.body.innerHTML : "");
+              console.log("🔍 First 500 chars of Google Search HTML:", bodyHTML.substring(0, 500));
 
               // 🔥 تصليح الفلترة: قشط نتايج جوجل بدون شروط استبعاد تسبب الأصفار
               const results = await page.evaluate(() => {
@@ -502,6 +515,7 @@ async function movieSniffer() {
                 });
                 return items;
               });
+              console.log(`🔍 [جوجل عربي] Extracted results count from search: ${results.length}`);
 
               results.forEach((item) => {
                 // تنظيف العناوين الطويلة لتظهر كأسماء أفلام شيك في الـ UI
@@ -897,6 +911,10 @@ async function masterSniffer() {
         // الدخول للموقع
         console.log(`🎯 [Slayer Scraper] Navigating to: ${url}`);
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+        console.log("📄 Page Title:", await page.title());
+        console.log("🌐 Current URL:", page.url());
+        const bodyHTML = await page.evaluate(() => document.body ? document.body.innerHTML : "");
+        console.log("🔍 First 500 chars of HTML:", bodyHTML.substring(0, 500));
         console.log(`🎯 [Slayer Scraper] Navigation completed. Waiting 4 seconds for stabilization...`);
         await new Promise((r) => setTimeout(r, 4000));
         
