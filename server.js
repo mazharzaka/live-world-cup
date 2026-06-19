@@ -792,93 +792,272 @@ async function getOrSniffStream(url) {
     console.log(`⚡ [Cache Hit] Stream found in cache for: ${cleanUrl}`);
     return cached;
   }
-  
+
   console.log(`🔍 [Cache Miss] Sniffing stream for: ${cleanUrl}`);
   let browser;
   let caughtStream = null;
   let fallbackEmbedUrl = null;
   let resolveStream;
-  const streamPromise = new Promise((resolve) => {
-    resolveStream = resolve;
-  });
-  
+  const streamPromise = new Promise((resolve) => { resolveStream = resolve; });
+
   try {
     console.log(`🔍 [Sniffer] Launching Puppeteer browser with 'shell' headless mode for: ${cleanUrl}...`);
     browser = await launchBrowser();
     console.log("🔍 [Sniffer] Puppeteer browser launched successfully!");
 
-    console.log(`🔍 [Sniffer] Opening new page...`);
     const page = await browser.newPage();
     await page.setViewport({ width: 1366, height: 768 });
     await configurePage(page);
-    
+
+    // ── Network interception: catch m3u8/mp4 URLs as they fire ──
     console.log("🔍 [Sniffer] Intercepting network requests...");
     await page.setRequestInterception(true);
     page.on("request", (r) => {
       try {
         const reqUrl = r.url().toLowerCase();
-        const cleanTarget = cleanUrl.toLowerCase().replace("://m.", "://");
-        
-        if (reqUrl.includes(cleanTarget) && (r.resourceType() === 'document' || r.resourceType() === 'navigation')) {
-          r.continue().catch(() => {});
-          return;
-        }
-        
+
+        // Block known ad/tracker domains to speed things up
         if (
-          reqUrl.includes("popads") ||
-          reqUrl.includes("adsterra") ||
-          reqUrl.includes("analytics") ||
-          reqUrl.includes("doubleclick") ||
-          reqUrl.includes("onclick") ||
-          reqUrl.includes("exoclick")
-        ) {
-          r.abort().catch(() => {});
-          return;
-        }
-        
+          reqUrl.includes("popads") || reqUrl.includes("adsterra") ||
+          reqUrl.includes("analytics") || reqUrl.includes("doubleclick") ||
+          reqUrl.includes("onclick") || reqUrl.includes("exoclick")
+        ) { r.abort().catch(() => {}); return; }
+
+        // Catch stream URLs
         if ((reqUrl.includes(".m3u8") || reqUrl.includes(".mp4") || reqUrl.includes(".ts")) && !caughtStream) {
           if (!reqUrl.includes("google") && !reqUrl.includes("facebook")) {
+            console.log(`🎯 [Sniffer] ✅ Caught stream via network: ${r.url()}`);
             caughtStream = r.url();
             resolveStream(caughtStream);
           }
         }
         r.continue().catch(() => {});
       } catch (err) {
-        console.error("⚠️ [Sniffer] Interception handler error:", err.message);
+        console.error("⚠️ [Sniffer] Interception error:", err.message);
       }
     });
-    
+
+    // ── Step 1: Navigate to movie page (tolerate timeout — content may already be in DOM) ──
+    console.log(`🔍 [Sniffer] Navigating to movie page: ${cleanUrl}`);
     try {
-      await page.goto(cleanUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-      const embedUrl = await page.evaluate(() => {
+      await page.goto(cleanUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+      console.log("🔍 [Sniffer] Movie page loaded. Title:", await page.title());
+    } catch (e) {
+      console.log(`⚠️ [Sniffer] Navigation timeout (will still try extraction): ${e.message}`);
+      // Give the browser 5 extra seconds after partial load
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+
+    // ── Step 2: Always extract embed URL even after timeout ──
+    console.log("🔍 [Sniffer] Extracting embed player from page DOM...");
+    let embedUrl = null;
+    try {
+      embedUrl = await page.evaluate(() => {
+        // 1. Check all iframes
         const iframes = Array.from(document.querySelectorAll("iframe"));
         for (let iframe of iframes) {
-          const src = iframe.src || iframe.getAttribute("data-src");
-          if (src && (src.includes("embed") || src.includes("player"))) return src;
+          const src = iframe.src || iframe.getAttribute("data-src") || iframe.getAttribute("data-lazy-src");
+          if (src && src.startsWith("http")) return src;
+        }
+        // 2. Check video elements directly
+        const videos = Array.from(document.querySelectorAll("video source, video[src]"));
+        for (let v of videos) {
+          const src = v.src || v.getAttribute("data-src");
+          if (src && src.startsWith("http")) return src;
+        }
+        // 3. Scan inline scripts for m3u8 URLs
+        const scripts = Array.from(document.querySelectorAll("script:not([src])"));
+        for (let s of scripts) {
+          const m = (s.textContent || "").match(/["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/);
+          if (m) return m[1];
         }
         return null;
       });
-      
-      if (embedUrl) {
-        fallbackEmbedUrl = embedUrl;
-        await page.goto(embedUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-        await Promise.race([
-          streamPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000))
-        ]);
-      }
-    } catch (e) {
-      console.log(`ℹ️ [Sniffer] Page load: ${e.message}`);
+      console.log(`🔍 [Sniffer] Embed URL extracted: ${embedUrl || "none found"}`);
+    } catch (evalErr) {
+      console.log(`⚠️ [Sniffer] DOM evaluation error: ${evalErr.message}`);
     }
+
+    // ── Step 3: Navigate into embed player and wait for stream ──
+    if (embedUrl) {
+      fallbackEmbedUrl = embedUrl;
+      console.log(`🔍 [Sniffer] Navigating into embed player: ${embedUrl}`);
+
+      // Also intercept responses to catch m3u8 by Content-Type
+      // (some players use CDN URLs that don't contain .m3u8 in the path)
+      page.on('response', async (response) => {
+        try {
+          const respUrl = response.url();
+          const ct = response.headers()['content-type'] || '';
+          if ((ct.includes('mpegurl') || ct.includes('x-mpegURL') || ct.includes('m3u8')) && !caughtStream) {
+            console.log(`🎯 [Sniffer] ✅ Caught m3u8 via response Content-Type: ${respUrl}`);
+            caughtStream = respUrl;
+            resolveStream(respUrl);
+          }
+        } catch (e) {}
+      });
+
+      try {
+        await page.goto(embedUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+        console.log("🔍 [Sniffer] Embed player loaded. Title:", await page.title());
+      } catch (e) {
+        console.log(`⚠️ [Sniffer] Embed navigation warning: ${e.message}`);
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+
+      // Wait up to 25s for network interceptor to catch a stream
+      await Promise.race([
+        streamPromise,
+        new Promise((r) => setTimeout(r, 25000))
+      ]);
+
+      // ── Step 3b: Extract from JS player APIs (JW Player, VideoJS, Plyr, etc.) ──
+      if (!caughtStream) {
+        console.log("🔍 [Sniffer] Trying to extract stream from JS player APIs...");
+        try {
+          const playerSrc = await page.evaluate(() => {
+            // 1. JW Player
+            try {
+              if (window.jwplayer) {
+                const p = window.jwplayer();
+                if (p && p.getConfig) {
+                  const cfg = p.getConfig();
+                  const file = cfg.file ||
+                    (cfg.playlist && cfg.playlist[0] && (cfg.playlist[0].file || cfg.playlist[0].sources?.[0]?.file));
+                  if (file) return file;
+                }
+                // also try getPlaylist
+                if (p && p.getPlaylist) {
+                  const pl = p.getPlaylist();
+                  if (pl && pl[0] && pl[0].file) return pl[0].file;
+                }
+              }
+            } catch (e) {}
+
+            // 2. VideoJS
+            try {
+              if (window.videojs && window.videojs.players) {
+                for (let key of Object.keys(window.videojs.players)) {
+                  const p = window.videojs.players[key];
+                  if (p && p.currentSrc && p.currentSrc()) return p.currentSrc();
+                  if (p && p.src && p.src()) return p.src();
+                }
+              }
+            } catch (e) {}
+
+            // 3. Plyr
+            try {
+              if (window.player && window.player.source) {
+                const src = window.player.source;
+                if (typeof src === 'string') return src;
+              }
+            } catch (e) {}
+
+            // 4. Scan all inline scripts for any m3u8 or mp4 URL
+            const scripts = Array.from(document.querySelectorAll('script:not([src])'));
+            for (let s of scripts) {
+              const text = s.textContent || '';
+              // m3u8
+              let m = text.match(/["'`](https?:\/\/[^"'`\s]+\.m3u8[^"'`\s]*)["'`]/);
+              if (m) return m[1];
+              // mp4
+              m = text.match(/["'`](https?:\/\/[^"'`\s]+\.mp4[^"'`\s]*)["'`]/);
+              if (m) return m[1];
+            }
+
+            // 5. Check video[src] directly
+            const vid = document.querySelector('video[src], video source[src]');
+            if (vid) return vid.src || vid.getAttribute('src');
+
+            return null;
+          });
+
+          if (playerSrc && !caughtStream) {
+            console.log(`🎯 [Sniffer] ✅ Extracted stream from JS player: ${playerSrc}`);
+            caughtStream = playerSrc;
+          }
+        } catch (evalErr) {
+          console.log(`⚠️ [Sniffer] JS player extraction error: ${evalErr.message}`);
+        }
+      }
+
+      // ── Step 3c: Check for nested iframe inside embed player ──
+      if (!caughtStream) {
+        console.log("🔍 [Sniffer] Checking for nested iframes inside embed player...");
+        try {
+          const nestedEmbed = await page.evaluate(() => {
+            const iframes = Array.from(document.querySelectorAll('iframe'));
+            for (let f of iframes) {
+              const src = f.src || f.getAttribute('data-src');
+              if (src && src.startsWith('http')) return src;
+            }
+            return null;
+          });
+          if (nestedEmbed && nestedEmbed !== embedUrl) {
+            console.log(`🔍 [Sniffer] Found nested player: ${nestedEmbed}`);
+            try {
+              await page.goto(nestedEmbed, { waitUntil: "domcontentloaded", timeout: 30000 });
+            } catch (e) { await new Promise(r => setTimeout(r, 3000)); }
+            await Promise.race([
+              streamPromise,
+              new Promise((r) => setTimeout(r, 15000))
+            ]);
+            // Try JS extraction again on nested player
+            if (!caughtStream) {
+              try {
+                const nestedSrc = await page.evaluate(() => {
+                  const vid = document.querySelector('video[src], video source[src]');
+                  if (vid) return vid.src || vid.getAttribute('src');
+                  const scripts = Array.from(document.querySelectorAll('script:not([src])'));
+                  for (let s of scripts) {
+                    const m = (s.textContent || '').match(/["'`](https?:\/\/[^"'`\s]+\.m3u8[^"'`\s]*)["'`]/);
+                    if (m) return m[1];
+                  }
+                  return null;
+                });
+                if (nestedSrc) {
+                  console.log(`🎯 [Sniffer] ✅ Caught stream from nested player JS: ${nestedSrc}`);
+                  caughtStream = nestedSrc;
+                }
+              } catch (e) {}
+            }
+          }
+        } catch (nestedErr) {
+          console.log(`⚠️ [Sniffer] Nested check error: ${nestedErr.message}`);
+        }
+      }
+
+    } else {
+      // No embed iframe — just wait for direct network stream
+      console.log("🔍 [Sniffer] No embed iframe found — waiting for direct network stream...");
+      await Promise.race([
+        streamPromise,
+        new Promise((r) => setTimeout(r, 25000))
+      ]);
+    }
+
   } catch (err) {
     console.error(`❌ Sniffer error:`, err.message);
   } finally {
-    if (browser) await browser.close();
+    if (browser) { try { await browser.close(); } catch(e) {} }
   }
-  
-  const finalStream = caughtStream || fallbackEmbedUrl;
+
+  // Prefer the direct caught m3u8 stream — only fall back to iframe as last resort
+  const finalStream = caughtStream || (fallbackEmbedUrl ? fallbackEmbedUrl : null);
+  console.log(`🔍 [Sniffer] Result → stream: ${caughtStream || "none"}, embed: ${fallbackEmbedUrl || "none"}`);
   if (finalStream) {
-    const data = { streamUrl: finalStream, type: finalStream.includes(".m3u8") ? "hls" : "iframe", referer: cleanUrl, timestamp: Date.now() };
+    // If we only have an iframe (no m3u8), log a warning
+    if (!caughtStream && fallbackEmbedUrl) {
+      console.log(`⚠️ [Sniffer] Returning iframe fallback — ads may appear in player`);
+    }
+    const data = {
+      streamUrl: finalStream,
+      type: caughtStream
+        ? (caughtStream.includes(".m3u8") ? "hls" : "direct")
+        : "iframe",
+      referer: cleanUrl,
+      timestamp: Date.now()
+    };
     streamCache.set(cleanUrl, data);
     return data;
   }

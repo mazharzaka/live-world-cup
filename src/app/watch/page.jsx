@@ -212,7 +212,9 @@ function WatchContent() {
               borderRadius: "var(--radius-xl)",
             }}
             allowFullScreen
-            allow="autoplay; encrypted-media"
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+            referrerPolicy="no-referrer"
           />
         )}
 
