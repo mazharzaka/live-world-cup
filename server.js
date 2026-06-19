@@ -110,6 +110,7 @@ async function movieSniffer() {
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
       "--disable-blink-features=AutomationControlled",
       "--ignore-certificate-errors", // عشان ننسى حوار شهادات الأمان تماماً
       "--ignore-ssl-errors=yes",
@@ -145,10 +146,11 @@ async function movieSniffer() {
   );
 
   const browser = await puppeteer.launch({
-    headless: false,
+    headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
       "--disable-blink-features=AutomationControlled",
       "--ignore-certificate-errors",
       "--window-size=1366,768",
@@ -567,6 +569,7 @@ app.get("/api/search", async (req, res) => {
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
         "--disable-blink-features=AutomationControlled",
         "--ignore-certificate-errors",
         "--window-size=1366,768",
@@ -710,6 +713,7 @@ async function getOrSniffStream(url) {
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
       "--disable-blink-features=AutomationControlled",
       "--disable-features=IsolateOrigins,site-per-process",
       "--ignore-certificate-errors",
@@ -849,6 +853,7 @@ async function masterSniffer() {
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
       "--disable-blink-features=AutomationControlled",
       "--disable-features=IsolateOrigins,site-per-process",
       "--ignore-certificate-errors",
