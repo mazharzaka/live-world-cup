@@ -547,32 +547,59 @@ async function movieSniffer() {
   }
 }
 
+async function fetchCategoryFromDB(category) {
+  try {
+    const items = await Media.find({ category });
+    if (items && items.length > 0) {
+      scrapedData[category] = items.map(item => ({
+        id: item._id.toString(),
+        title: item.title,
+        poster: item.poster,
+        targetUrl: item.url,
+      }));
+      console.log(`🔌 [DB] Loaded ${scrapedData[category].length} items for category: ${category}`);
+    }
+  } catch (err) {
+    console.error(`❌ [DB] Error loading category ${category} from database:`, err.message);
+  }
+}
+
 // 4️⃣ رابعاً: تحديث الـ Endpoint عشان ترجع الداتا المتفصصة دي
 // 1. Endpoint الأفلام العربي
-app.get("/api/movies/arabic", (req, res) => {
+app.get("/api/movies/arabic", async (req, res) => {
   console.log("🎬 [API] طلب قائمة الأفلام العربية...");
+  if (!scrapedData.arabicMovies || scrapedData.arabicMovies.length === 0) {
+    await fetchCategoryFromDB("arabicMovies");
+  }
   res.json(scrapedData.arabicMovies);
 });
 
 // 2. Endpoint الأفلام الأجنبي
-app.get("/api/movies/english", (req, res) => {
+app.get("/api/movies/english", async (req, res) => {
   console.log("🎬 [API] طلب قائمة الأفلام الأجنبية...");
+  if (!scrapedData.englishMovies || scrapedData.englishMovies.length === 0) {
+    await fetchCategoryFromDB("englishMovies");
+  }
   res.json(scrapedData.englishMovies);
 });
 
 // 3. Endpoint المسلسلات العربي
-app.get("/api/series/arabic", (req, res) => {
+app.get("/api/series/arabic", async (req, res) => {
   console.log("📺 [API] طلب قائمة المسلسلات العربية...");
+  if (!scrapedData.arabicSeries || scrapedData.arabicSeries.length === 0) {
+    await fetchCategoryFromDB("arabicSeries");
+  }
   res.json(scrapedData.arabicSeries);
 });
 
 // 4. Endpoint المسلسلات الأجنبي
-app.get("/api/series/english", (req, res) => {
+app.get("/api/series/english", async (req, res) => {
   console.log("📺 [API] طلب قائمة المسلسلات الأجنبية...");
+  if (!scrapedData.englishSeries || scrapedData.englishSeries.length === 0) {
+    await fetchCategoryFromDB("englishSeries");
+  }
   res.json(scrapedData.englishSeries);
 });
-// Disabled immediate sniffer call since it's now handled by runHourlyCronJob on startup
-// movieSniffer();
 
 app.get("/api/search", async (req, res) => {
   const query = req.query.q;
@@ -1415,7 +1442,12 @@ async function runHourlyCronJob() {
 }
 
 // Run initial job on startup once DB is connected
-mongoose.connection.once("open", () => {
+mongoose.connection.once("open", async () => {
+  console.log("🚀 MongoDB connection open. Restoring cache from DB...");
+  const categories = ["arabicMovies", "englishMovies", "arabicSeries", "englishSeries"];
+  for (const cat of categories) {
+    await fetchCategoryFromDB(cat);
+  }
   console.log("🚀 Running initial movie scraping and sniffing job...");
   runHourlyCronJob().catch(err => console.error("Error running initial cron job:", err));
 });
