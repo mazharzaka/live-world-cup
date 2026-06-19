@@ -18,10 +18,13 @@ export default function MovieCard({ id, title, poster, targetUrl }) {
       >
         {/* Poster Image */}
         <motion.img
-          src={poster}
+          src={poster || 'https://placehold.co/300x450/1a1a1a/FFF?text=No+Poster'}
           alt={title}
           referrerPolicy="no-referrer"
           className="movie-card-poster"
+          onError={(e) => {
+            e.currentTarget.src = 'https://placehold.co/300x450/1a1a1a/FFF?text=No+Poster';
+          }}
           variants={{
             rest: { scale: 1 },
             hover: { scale: 1.08 }

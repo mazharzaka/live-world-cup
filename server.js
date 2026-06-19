@@ -1,4 +1,15 @@
 // server.js
+require("dotenv").config();
+const mongoose = require("mongoose");
+const cron = require("node-cron");
+const Media = require("./src/models/Media");
+
+// Connect to MongoDB
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/stream-hunter";
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log("🔌 Connected to MongoDB Successfully!"))
+  .catch((err) => console.error("❌ MongoDB Connection Error:", err));
+
 const express = require("express");
 const cors = require("cors");
 const { spawn } = require("child_process");
@@ -316,7 +327,7 @@ async function movieSniffer() {
                   
                   const imgEl = card.tagName === "IMG" ? card : card.querySelector("img");
                   if (imgEl) {
-                    posterUrl = imgEl.getAttribute("data-src") || imgEl.getAttribute("data-lazy-src") || imgEl.getAttribute("data-lazy-style") || imgEl.src;
+                    posterUrl = imgEl.getAttribute("data-src") || imgEl.getAttribute("data-lazy-src") || imgEl.getAttribute("data-echo") || imgEl.getAttribute("data-lazy-style") || imgEl.src;
                   }
 
                   if (!posterUrl || posterUrl.includes("melody-lzld")) {
@@ -331,9 +342,9 @@ async function movieSniffer() {
                   }
 
                   if (!posterUrl || posterUrl.includes("melody-lzld")) {
-                     const allLazy = card.querySelectorAll('[data-lazy-src], [data-src]');
+                     const allLazy = card.querySelectorAll('[data-lazy-src], [data-src], [data-echo]');
                      for(let el of allLazy) {
-                         const src = el.getAttribute("data-lazy-src") || el.getAttribute("data-src");
+                         const src = el.getAttribute("data-lazy-src") || el.getAttribute("data-src") || el.getAttribute("data-echo");
                          if (src && !src.includes("melody-lzld")) {
                              posterUrl = src;
                              break;
@@ -543,8 +554,8 @@ app.get("/api/series/english", (req, res) => {
   console.log("📺 [API] طلب قائمة المسلسلات الأجنبية...");
   res.json(scrapedData.englishSeries);
 });
-// تشغيل الفحص فوراً
-movieSniffer();
+// Disabled immediate sniffer call since it's now handled by runHourlyCronJob on startup
+// movieSniffer();
 
 app.get("/api/search", async (req, res) => {
   const query = req.query.q;
@@ -1219,20 +1230,43 @@ app.get("/api/media/stream", async (req, res) => {
   let targetUrl = req.query.targetUrl || req.query.url;
   if (!targetUrl) return res.status(400).json({ error: "الرابط مطلوب" });
 
-  console.log(`🎬 [Media Stream API] طلب قنص رابط البث لـ: ${targetUrl}`);
+  targetUrl = cleanMovieUrl(targetUrl);
+  console.log(`🎬 [Media Stream API] Cache-First request for: ${targetUrl}`);
   
   try {
+    // 1. Check MongoDB first (Cache-First)
+    const cached = await Media.findOne({ url: targetUrl });
+    if (cached && cached.streamUrl) {
+      console.log(`⚡ [Cache Hit - DB] Found stream in database for: ${targetUrl}`);
+      return res.json({ streamUrl: cached.streamUrl, type: cached.type });
+    }
+    
+    console.log(`🔍 [Cache Miss - DB] Sniffing stream using Puppeteer for: ${targetUrl}`);
+    // 2. Fallback to Puppeteer if not in DB or streamUrl is missing
     const result = await getOrSniffStream(targetUrl);
-    if (result) {
-      res.json({ streamUrl: result.streamUrl, type: result.type });
+    if (result && result.streamUrl) {
+      // Save/update to MongoDB in the background
+      Media.findOneAndUpdate(
+        { url: targetUrl },
+        {
+          url: targetUrl,
+          streamUrl: result.streamUrl,
+          type: result.type,
+          fetchedAt: new Date()
+        },
+        { upsert: true, new: true }
+      ).catch(err => console.error("❌ Failed to update DB on fallback stream sniff:", err.message));
+      
+      return res.json({ streamUrl: result.streamUrl, type: result.type });
     } else {
-      res.status(404).json({ error: "لم يتم العثور على رابط بث نظيف حالياً" });
+      return res.status(404).json({ error: "لم يتم العثور على رابط بث نظيف حالياً" });
     }
   } catch (err) {
     console.error(`❌ Error in /api/media/stream:`, err.message);
-    res.status(500).json({ error: "حدث خطأ أثناء قنص البث" });
+    return res.status(500).json({ error: "حدث خطأ أثناء قنص البث" });
   }
 });
+
 function startFfmpeg(url, res, req, referer) {
   res.setHeader("Content-Type", "video/mp4");
   const ffmpegBin = getFfmpegPath();
@@ -1278,6 +1312,89 @@ function startFfmpeg(url, res, req, referer) {
     ffmpeg.kill();
   });
 }
+
+// Hourly Cron Job using node-cron (0 * * * * = every hour)
+cron.schedule("0 * * * *", async () => {
+  console.log("⏰ [Cron] Starting hourly movie scraping and stream sniffing job...");
+  try {
+    await runHourlyCronJob();
+  } catch (err) {
+    console.error("❌ [Cron] Error in hourly movie job:", err.message);
+  }
+});
+
+async function runHourlyCronJob() {
+  console.log("🎬 [Cron Job] Running movieSniffer to update movie lists...");
+  await movieSniffer();
+  
+  const categories = ["arabicMovies", "englishMovies", "arabicSeries", "englishSeries"];
+  
+  for (const category of categories) {
+    const items = scrapedData[category] || [];
+    console.log(`🎬 [Cron Job] Processing ${items.length} items in category: ${category}`);
+    
+    for (const item of items) {
+      try {
+        const existing = await Media.findOne({ url: item.targetUrl });
+        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        
+        let streamInfo = null;
+        if (existing && existing.streamUrl && existing.fetchedAt > twoHoursAgo) {
+          console.log(`[Cron] Using cached stream for ${item.title}`);
+          streamInfo = {
+            streamUrl: existing.streamUrl,
+            type: existing.type
+          };
+        } else {
+          console.log(`[Cron] Sniffing stream for ${item.title} (${item.targetUrl})...`);
+          // Wait a short delay to be nice to websites
+          await new Promise(r => setTimeout(r, 2000));
+          streamInfo = await getOrSniffStream(item.targetUrl);
+        }
+        
+        if (streamInfo && streamInfo.streamUrl) {
+          await Media.findOneAndUpdate(
+            { url: item.targetUrl },
+            {
+              title: item.title,
+              url: item.targetUrl,
+              poster: item.poster,
+              streamUrl: streamInfo.streamUrl,
+              type: streamInfo.type,
+              platform: item.targetUrl.includes("topcinema") ? "topcinema" : (item.targetUrl.includes("arabseed") || item.targetUrl.includes("asd") ? "arabseed" : "other"),
+              category: category,
+              fetchedAt: new Date()
+            },
+            { upsert: true, new: true }
+          );
+          console.log(`✅ [Cron] Upserted stream for: ${item.title}`);
+        } else {
+          await Media.findOneAndUpdate(
+            { url: item.targetUrl },
+            {
+              title: item.title,
+              url: item.targetUrl,
+              poster: item.poster,
+              platform: item.targetUrl.includes("topcinema") ? "topcinema" : (item.targetUrl.includes("arabseed") || item.targetUrl.includes("asd") ? "arabseed" : "other"),
+              category: category
+            },
+            { upsert: true, new: true }
+          );
+          console.log(`⚠️ [Cron] Saved metadata only (sniff failed) for: ${item.title}`);
+        }
+      } catch (err) {
+        console.error(`❌ [Cron] Error processing item ${item.title}:`, err.message);
+      }
+    }
+  }
+  console.log("🏁 [Cron Job] Hourly movie scraping and sniffing completed.");
+}
+
+// Run initial job on startup once DB is connected
+mongoose.connection.once("open", () => {
+  console.log("🚀 Running initial movie scraping and sniffing job...");
+  runHourlyCronJob().catch(err => console.error("Error running initial cron job:", err));
+});
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`🚀 Slayer Scraper Running on Port ${PORT}`));
