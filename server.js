@@ -3,6 +3,7 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 const cron = require("node-cron");
 const Media = require("./src/models/Media");
+const Match = require("./src/models/Match");
 
 // Connect to MongoDB
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/stream-hunter";
@@ -101,23 +102,53 @@ const MOVIE_TARGETS = [
   "https://web.topcinemaa.com/",
 ];
 
+// Helper to launch Puppeteer with optional proxy settings
+async function launchBrowser() {
+  const args = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-extensions',
+    '--ignore-certificate-errors',
+    '--ignore-ssl-errors=yes',
+    '--blink-settings=imagesEnabled=false'
+  ];
+
+  const proxyServer = process.env.PROXY_SERVER; // e.g. http://p.webshare.io:80
+  if (proxyServer) {
+    args.push(`--proxy-server=${proxyServer}`);
+    console.log(`📡 [Proxy] Launching browser with proxy: ${proxyServer}`);
+  }
+
+  const browser = await puppeteer.launch({
+    headless: 'shell',
+    args,
+  });
+
+  return browser;
+}
+
+// Helper to configure page timeout, user agent and optional proxy authentication
+async function configurePage(page) {
+  await page.setDefaultNavigationTimeout(30000);
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+  );
+  
+  const proxyUser = process.env.PROXY_USERNAME;
+  const proxyPass = process.env.PROXY_PASSWORD;
+  if (proxyUser && proxyPass) {
+    console.log(`📡 [Proxy] Authenticating proxy for page with user: ${proxyUser}`);
+    await page.authenticate({ username: proxyUser, password: proxyPass });
+  }
+}
+
 async function movieSnifferOld() {
   console.log("🎬 [Movie Scraper] بدء شفط السينما الذكي (بدون كلاسات)...");
   let moviesFound = [];
 
-  const browser = await puppeteer.launch({
-    headless: 'shell',
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--disable-extensions',
-      '--ignore-certificate-errors',
-      '--ignore-ssl-errors=yes',
-      '--blink-settings=imagesEnabled=false'
-    ],
-  });
+  const browser = await launchBrowser();
 
   for (let url of MOVIE_TARGETS) {
     let page = null;
@@ -125,9 +156,7 @@ async function movieSnifferOld() {
       console.log(`🎯 جاري فتح متصفح معزول للأفلام: ${url}`);
       page = await browser.newPage();
       await page.setDefaultNavigationTimeout(45000);
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      );
+      await configurePage(page);
     } catch (error) {
       console.error(`❌ [${url}] خطأ في فتح الصفحة:`, error);
     }
@@ -148,19 +177,7 @@ async function movieSniffer() {
   );
 
   console.log("🚀 [Ultimate Scraper] Launching Puppeteer browser...");
-  const browser = await puppeteer.launch({
-    headless: 'shell',
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--disable-extensions',
-      '--ignore-certificate-errors',
-      '--ignore-ssl-errors=yes',
-      '--blink-settings=imagesEnabled=false'
-    ],
-  });
+  const browser = await launchBrowser();
   console.log("🚀 [Ultimate Scraper] Puppeteer browser launched successfully!");
 
   scrapedData = {
@@ -200,10 +217,7 @@ async function movieSniffer() {
         const page = await browser.newPage();
         console.log(`🚀 [Ultimate Scraper] Page opened for task: ${task.source}. Setting viewport, timeout, and user agent...`);
         await page.setViewport({ width: 1366, height: 768 });
-        await page.setDefaultNavigationTimeout(30000);
-        await page.setUserAgent(
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        );
+        await configurePage(page);
         console.log(`🚀 [Ultimate Scraper] Page configured for task: ${task.source}`);
 
         // 👑 المسار الأول: توب سينما للأجنبي بالمنيو الديناميكي (شغال الله ينور)
@@ -608,19 +622,7 @@ app.get("/api/search", async (req, res) => {
   let browser;
   try {
     console.log(`🔍 [Search API] Launching Puppeteer browser in 'shell' headless mode for query: "${query}"...`);
-    browser = await puppeteer.launch({
-      headless: 'shell',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--ignore-certificate-errors',
-        '--ignore-ssl-errors=yes',
-        '--blink-settings=imagesEnabled=false'
-      ],
-    });
+    browser = await launchBrowser();
     console.log("🔍 [Search API] Puppeteer browser launched successfully!");
 
     const results = [];
@@ -637,8 +639,7 @@ app.get("/api/search", async (req, res) => {
       try {
         console.log(`🔍 [Search API] Opening new page for source: ${task.source}`);
         page = await browser.newPage();
-        await page.setDefaultNavigationTimeout(30000);
-        await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
+        await configurePage(page);
         
         try {
           console.log(`🔍 [Search API] Navigating ${task.source} to: ${task.url}`);
@@ -784,25 +785,13 @@ async function getOrSniffStream(url) {
   
   try {
     console.log(`🔍 [Sniffer] Launching Puppeteer browser with 'shell' headless mode for: ${cleanUrl}...`);
-    browser = await puppeteer.launch({
-      headless: 'shell',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--ignore-certificate-errors',
-        '--ignore-ssl-errors=yes',
-        '--blink-settings=imagesEnabled=false'
-      ],
-    });
+    browser = await launchBrowser();
     console.log("🔍 [Sniffer] Puppeteer browser launched successfully!");
 
     console.log(`🔍 [Sniffer] Opening new page...`);
     const page = await browser.newPage();
     await page.setViewport({ width: 1366, height: 768 });
-    await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
+    await configurePage(page);
     
     console.log("🔍 [Sniffer] Intercepting network requests...");
     await page.setRequestInterception(true);
@@ -884,19 +873,7 @@ async function masterSniffer() {
 
   try {
     console.log("🥷 [Slayer Scraper] Launching Puppeteer browser with 'shell' headless mode...");
-    browser = await puppeteer.launch({
-      headless: 'shell',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--ignore-certificate-errors',
-        '--ignore-ssl-errors=yes',
-        '--blink-settings=imagesEnabled=false'
-      ],
-    });
+    browser = await launchBrowser();
     console.log("🥷 [Slayer Scraper] Puppeteer browser launched successfully!");
 
     const REAL_LIVE_TARGETS = [
@@ -915,10 +892,7 @@ async function masterSniffer() {
         console.log(`🎯 [Slayer Scraper] Opening page for: ${url}`);
         page = await browser.newPage();
         console.log(`🎯 [Slayer Scraper] Page opened for ${url}. Setting timeout and user-agent...`);
-        await page.setDefaultNavigationTimeout(30000);
-        await page.setUserAgent(
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        );
+        await configurePage(page);
 
         // الدخول للموقع
         console.log(`🎯 [Slayer Scraper] Navigating to: ${url}`);
@@ -1086,6 +1060,25 @@ async function masterSniffer() {
       `📊 إجمالي المباريات المجمعة من كل المواقع معاً مرتبة: ${scrapedMatches.length}`,
     );
 
+    // حفظ المباريات في قاعدة البيانات لمشاركتها مع خوادم الإنتاج
+    try {
+      await Match.deleteMany({});
+      for (const match of grouped) {
+        await Match.create({
+          matchId: match.id,
+          teamA: match.teamA,
+          teamB: match.teamB,
+          isLive: match.isLive,
+          time: match.time,
+          targetSiteUrl: match.targetSiteUrl,
+          alternativeUrls: match.alternativeUrls,
+        });
+      }
+      console.log("💾 [DB] Successfully saved scraped matches to database.");
+    } catch (err) {
+      console.error("❌ [DB] Error saving matches to database:", err.message);
+    }
+
     // Pre-sniff the main stream URL for all live matches in the background
     for (const match of grouped) {
       if (match.isLive && match.targetSiteUrl) {
@@ -1093,8 +1086,28 @@ async function masterSniffer() {
       }
     }
   } else {
-    console.log("🔄 شحن داتا الديمو...");
-    loadFallback();
+    // محاولة جلب المباريات من قاعدة البيانات قبل التحميل الوهمي
+    try {
+      const cached = await Match.find({});
+      if (cached && cached.length > 0) {
+        console.log(`🔌 [DB] Loaded ${cached.length} cached matches from database instead of demo data.`);
+        scrapedMatches = cached.map(c => ({
+          id: c.matchId,
+          teamA: c.teamA,
+          teamB: c.teamB,
+          isLive: c.isLive,
+          time: c.time,
+          targetSiteUrl: c.targetSiteUrl,
+          alternativeUrls: c.alternativeUrls,
+        }));
+      } else {
+        console.log("🔄 شحن داتا الديمو...");
+        loadFallback();
+      }
+    } catch (err) {
+      console.error("❌ [DB] Error loading fallback matches from database:", err.message);
+      loadFallback();
+    }
   }
 }
 
@@ -1441,16 +1454,42 @@ async function runHourlyCronJob() {
   console.log("🏁 [Cron Job] Hourly movie scraping and sniffing completed.");
 }
 
-// Run initial job on startup once DB is connected
-mongoose.connection.once("open", async () => {
-  console.log("🚀 MongoDB connection open. Restoring cache from DB...");
+// Initialize startup tasks immediately on boot
+async function initializeStartup() {
+  console.log("🚀 Restoring cache from DB on startup...");
+  
+  // استعادة مباريات اليوم من قاعدة البيانات لتجنب البيانات الوهمية
+  try {
+    const cachedMatches = await Match.find({});
+    if (cachedMatches && cachedMatches.length > 0) {
+      scrapedMatches = cachedMatches.map(c => ({
+        id: c.matchId,
+        teamA: c.teamA,
+        teamB: c.teamB,
+        isLive: c.isLive,
+        time: c.time,
+        targetSiteUrl: c.targetSiteUrl,
+        alternativeUrls: c.alternativeUrls,
+      }));
+      console.log(`🔌 [DB] Loaded ${scrapedMatches.length} cached matches from database.`);
+    } else {
+      console.log("🔄 No cached matches in DB, loading fallback...");
+      loadFallback();
+    }
+  } catch (err) {
+    console.error("❌ [DB] Error loading matches on startup:", err.message);
+    loadFallback();
+  }
+
   const categories = ["arabicMovies", "englishMovies", "arabicSeries", "englishSeries"];
   for (const cat of categories) {
     await fetchCategoryFromDB(cat);
   }
-  console.log("🚀 Running initial movie scraping and sniffing job...");
+  console.log("🚀 Starting initial movie scraping and sniffing job...");
   runHourlyCronJob().catch(err => console.error("Error running initial cron job:", err));
-});
+}
+
+initializeStartup();
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`🚀 Slayer Scraper Running on Port ${PORT}`));
