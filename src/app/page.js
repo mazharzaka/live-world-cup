@@ -244,7 +244,7 @@ export default function HomePage() {
                 video.load();
                 video.play().catch(() => {});
               } else {
-                video.src = `${getApiBaseUrl()}/api/stream?url=${encodeURIComponent(url)}`;
+                video.src = `https://live-world-cup.onrender.com/api/stream?url=${encodeURIComponent(url)}`;
                 video.load();
                 video.play().catch(() => {});
               }
