@@ -119,7 +119,9 @@ function MatchCard({ match, isActive, onWatch }) {
 }
 
 // ─── Helper: Dynamic API Base URL ──────────────────────────────────────────────
-
+const getApiBaseUrl = () => {
+  return process.env.NEXT_PUBLIC_API_URL || "https://live-world-cup.onrender.com";
+};
 // ─── Helper: Get Servers List ──────────────────────────────────────────────────
 const getServers = (match) => {
   if (!match) return [];
@@ -217,7 +219,7 @@ export default function HomePage() {
 
       setTimeout(async () => {
         try {
-          const streamApiUrl = `https://live-world-cup.onrender.com/api/media/stream?url=${encodeURIComponent(url)}`;
+          const streamApiUrl = `${getApiBaseUrl()}/api/media/stream?url=${encodeURIComponent(url)}`;
           const response = await fetch(streamApiUrl);
           const data = await response.json();
 
@@ -244,7 +246,7 @@ export default function HomePage() {
                 video.load();
                 video.play().catch(() => {});
               } else {
-                video.src = `https://live-world-cup.onrender.com/api/stream?url=${encodeURIComponent(url)}`;
+                video.src = `${getApiBaseUrl()}/api/stream?url=${encodeURIComponent(url)}`;
                 video.load();
                 video.play().catch(() => {});
               }
