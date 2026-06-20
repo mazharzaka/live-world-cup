@@ -32,7 +32,7 @@ function SearchResults() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`http://https://live-world-cup.onrender.com/api/search?q=${encodeURIComponent(query)}`);
+      const response = await fetch(`https://live-world-cup.onrender.com/api/search?q=${encodeURIComponent(query)}`);
       if (!response.ok) {
         throw new Error('فشل جلب البيانات من الخادم');
       }
