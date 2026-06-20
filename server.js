@@ -6,9 +6,11 @@ const Media = require("./src/models/Media");
 const Match = require("./src/models/Match");
 
 // Connect to MongoDB
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/stream-hunter";
+const MONGODB_URI =
+  process.env.MONGODB_URI || "mongodb://localhost:27017/stream-hunter";
 mongoose.set("bufferCommands", false); // Disable command buffering so disconnected queries fail fast instead of hanging
-mongoose.connect(MONGODB_URI)
+mongoose
+  .connect(MONGODB_URI)
   .then(() => console.log("🔌 Connected to MongoDB Successfully!"))
   .catch((err) => console.error("❌ MongoDB Connection Error:", err));
 
@@ -68,25 +70,55 @@ function splitMatchTitle(title) {
 }
 
 function areMatchesSame(m1, m2) {
-  const cleanStr1 = `${m1.teamA} ${m1.teamB}`.replace(/ال/g, '').replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '').trim();
-  const cleanStr2 = `${m2.teamA} ${m2.teamB}`.replace(/ال/g, '').replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '').trim();
+  const cleanStr1 = `${m1.teamA} ${m1.teamB}`
+    .replace(/ال/g, "")
+    .replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "")
+    .trim();
+  const cleanStr2 = `${m2.teamA} ${m2.teamB}`
+    .replace(/ال/g, "")
+    .replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "")
+    .trim();
 
-  const words1 = `${m1.teamA} ${m1.teamB}`.toLowerCase().split(/[\s🆚]+/).map(w => w.replace(/^ال/, '').trim()).filter(w => w.length > 2);
-  const words2 = `${m2.teamA} ${m2.teamB}`.toLowerCase().split(/[\s🆚]+/).map(w => w.replace(/^ال/, '').trim()).filter(w => w.length > 2);
-  
+  const words1 = `${m1.teamA} ${m1.teamB}`
+    .toLowerCase()
+    .split(/[\s🆚]+/)
+    .map((w) => w.replace(/^ال/, "").trim())
+    .filter((w) => w.length > 2);
+  const words2 = `${m2.teamA} ${m2.teamB}`
+    .toLowerCase()
+    .split(/[\s🆚]+/)
+    .map((w) => w.replace(/^ال/, "").trim())
+    .filter((w) => w.length > 2);
+
   let matches = 0;
   for (const w of words1) {
     if (words2.includes(w)) matches++;
   }
-  
-  return matches >= 2 || (words1.length === 2 && matches >= 1) || cleanStr1.includes(cleanStr2) || cleanStr2.includes(cleanStr1);
+
+  return (
+    matches >= 2 ||
+    (words1.length === 2 && matches >= 1) ||
+    cleanStr1.includes(cleanStr2) ||
+    cleanStr2.includes(cleanStr1)
+  );
 }
 
 function getFfmpegPath() {
   const fs = require("fs");
   const path = require("path");
   const userProfile = process.env.USERPROFILE || "C:\\Users\\mazharm";
-  const wingetPath = path.join(userProfile, "AppData", "Local", "Microsoft", "WinGet", "Packages", "Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe", "ffmpeg-8.1.1-full_build", "bin", "ffmpeg.exe");
+  const wingetPath = path.join(
+    userProfile,
+    "AppData",
+    "Local",
+    "Microsoft",
+    "WinGet",
+    "Packages",
+    "Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe",
+    "ffmpeg-8.1.1-full_build",
+    "bin",
+    "ffmpeg.exe",
+  );
   if (fs.existsSync(wingetPath)) {
     return wingetPath;
   }
@@ -144,7 +176,7 @@ async function launchBrowser() {
   }
 
   const browser = await puppeteer.launch({
-    headless: 'shell',
+    headless: "shell",
     args,
   });
 
@@ -175,7 +207,9 @@ async function configurePage(page) {
   const proxyUser = process.env.PROXY_USERNAME;
   const proxyPass = process.env.PROXY_PASSWORD;
   if (proxyUser && proxyPass) {
-    console.log(`📡 [Proxy] Authenticating proxy for page with user: ${proxyUser}`);
+    console.log(
+      `📡 [Proxy] Authenticating proxy for page with user: ${proxyUser}`,
+    );
     await page.authenticate({ username: proxyUser, password: proxyPass });
   }
 }
@@ -249,7 +283,8 @@ async function movieSniffer() {
       type: "direct_menu_site",
       source: "arabsid",
       searchKey: "عرب سيد",
-      fallbackBase: "https://vid.mycima.cc/categories-cimawbas.php?cat=5-cimawbas-aflam-3arby",
+      fallbackBase:
+        "https://vid.mycima.cc/categories-cimawbas.php?cat=5-cimawbas-aflam-3arby",
     },
     // {
     //   type: "google_search",
@@ -264,7 +299,9 @@ async function movieSniffer() {
   try {
     await Promise.all(
       tasks.map(async (task) => {
-        console.log(`🚀 [Ultimate Scraper] Opening new page for task: ${task.source}`);
+        console.log(
+          `🚀 [Ultimate Scraper] Opening new page for task: ${task.source}`,
+        );
         const page = await browser.newPage();
         await page.setViewport({ width: 1366, height: 768 });
         await configurePage(page);
@@ -274,13 +311,19 @@ async function movieSniffer() {
         // 👑 المسار الأول: توب سينما للأجنبي بالمنيو الديناميكي (شغال الله ينور)
         if (task.type === "direct_menu_site") {
           try {
-            console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قنص النطاق الحي من جوجل...`);
-            console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to Google search...`);
+            console.log(
+              `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قنص النطاق الحي من جوجل...`,
+            );
+            console.log(
+              `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to Google search...`,
+            );
             await page.goto(
               `https://www.google.com/search?q=${encodeURIComponent(task.searchKey)}`,
               { waitUntil: "domcontentloaded", timeout: 30000 },
             );
-            console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Google search page loaded.`);
+            console.log(
+              `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Google search page loaded.`,
+            );
 
             let baseUrl = await page.evaluate((key) => {
               const searchLinks = document.querySelectorAll("#search a");
@@ -288,7 +331,9 @@ async function movieSniffer() {
                 const href = a.href ? a.href.toLowerCase() : "";
                 if (
                   href &&
-                  (href.includes(key) || href.includes("arabseed") || href.includes("asd")) &&
+                  (href.includes(key) ||
+                    href.includes("arabseed") ||
+                    href.includes("asd")) &&
                   !href.includes("google")
                 )
                   return new URL(a.href).origin;
@@ -297,15 +342,31 @@ async function movieSniffer() {
             }, task.source);
 
             baseUrl = baseUrl || task.fallbackBase;
-            const isCategoryPage = baseUrl.includes("/category/") || baseUrl.includes("/list/") || baseUrl.includes("categories-cimawbas") || baseUrl.includes("aflam-3arby");
+            const isCategoryPage =
+              baseUrl.includes("/category/") ||
+              baseUrl.includes("/list/") ||
+              baseUrl.includes("categories-cimawbas") ||
+              baseUrl.includes("aflam-3arby");
 
-            console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to base URL: ${baseUrl}`);
-            await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+            console.log(
+              `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to base URL: ${baseUrl}`,
+            );
+            await page.goto(baseUrl, {
+              waitUntil: "domcontentloaded",
+              timeout: 30000,
+            });
             console.log("📄 Page Title:", await page.title());
             console.log("🌐 Current URL:", page.url());
-            const bodyHTML = await page.evaluate(() => document.body ? document.body.innerHTML : "");
-            console.log("🔍 First 500 chars of HTML:", bodyHTML.substring(0, 500));
-            console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Base URL loaded. Waiting 2 seconds...`);
+            const bodyHTML = await page.evaluate(() =>
+              document.body ? document.body.innerHTML : "",
+            );
+            console.log(
+              "🔍 First 500 chars of HTML:",
+              bodyHTML.substring(0, 500),
+            );
+            console.log(
+              `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Base URL loaded. Waiting 2 seconds...`,
+            );
             await new Promise((r) => setTimeout(r, 2000));
 
             const mappedSections = await page.evaluate(() => {
@@ -321,7 +382,9 @@ async function movieSniffer() {
                   !href ||
                   !href.startsWith("http") ||
                   href === window.location.href ||
-                  (!href.includes("/category/") && !href.includes("/movies/") && !href.includes("/series/"))
+                  (!href.includes("/category/") &&
+                    !href.includes("/movies/") &&
+                    !href.includes("/series/"))
                 )
                   return;
 
@@ -362,11 +425,18 @@ async function movieSniffer() {
             });
 
             if (isCategoryPage || Object.keys(mappedSections).length === 0) {
-              if (task.fallbackBase.includes("category/arabic-movies") || task.fallbackBase.includes("arabic-movies") || task.fallbackBase.includes("aflam-3arby")) {
+              if (
+                task.fallbackBase.includes("category/arabic-movies") ||
+                task.fallbackBase.includes("arabic-movies") ||
+                task.fallbackBase.includes("aflam-3arby")
+              ) {
                 if (!mappedSections["arabicMovies"]) {
                   mappedSections["arabicMovies"] = baseUrl;
                 }
-              } else if (task.fallbackBase.includes("category/arabic-series") || task.fallbackBase.includes("arabic-series")) {
+              } else if (
+                task.fallbackBase.includes("category/arabic-series") ||
+                task.fallbackBase.includes("arabic-series")
+              ) {
                 if (!mappedSections["arabicSeries"]) {
                   mappedSections["arabicSeries"] = baseUrl;
                 }
@@ -375,14 +445,28 @@ async function movieSniffer() {
 
             for (let key in mappedSections) {
               const sectionUrl = mappedSections[key];
-              console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قشط القسم [${key}] من الرابط: ${sectionUrl}`);
-              console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to section URL: ${sectionUrl}`);
-              await page.goto(sectionUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+              console.log(
+                `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قشط القسم [${key}] من الرابط: ${sectionUrl}`,
+              );
+              console.log(
+                `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to section URL: ${sectionUrl}`,
+              );
+              await page.goto(sectionUrl, {
+                waitUntil: "domcontentloaded",
+                timeout: 30000,
+              });
               console.log("📄 Page Title:", await page.title());
               console.log("🌐 Current URL:", page.url());
-              const bodyHTML = await page.evaluate(() => document.body ? document.body.innerHTML : "");
-              console.log("🔍 First 500 chars of HTML:", bodyHTML.substring(0, 500));
-              console.log(`📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Section URL loaded. Scrolling...`);
+              const bodyHTML = await page.evaluate(() =>
+                document.body ? document.body.innerHTML : "",
+              );
+              console.log(
+                "🔍 First 500 chars of HTML:",
+                bodyHTML.substring(0, 500),
+              );
+              console.log(
+                `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Section URL loaded. Scrolling...`,
+              );
 
               await page.evaluate(async () => {
                 for (let i = 0; i < 5; i++) {
@@ -414,16 +498,26 @@ async function movieSniffer() {
                     return;
 
                   let posterUrl = "";
-                  
-                  const imgEl = card.tagName === "IMG" ? card : card.querySelector("img");
+
+                  const imgEl =
+                    card.tagName === "IMG" ? card : card.querySelector("img");
                   if (imgEl) {
-                    posterUrl = imgEl.getAttribute("data-src") || imgEl.getAttribute("data-lazy-src") || imgEl.getAttribute("data-echo") || imgEl.getAttribute("data-lazy-style") || imgEl.src;
+                    posterUrl =
+                      imgEl.getAttribute("data-src") ||
+                      imgEl.getAttribute("data-lazy-src") ||
+                      imgEl.getAttribute("data-echo") ||
+                      imgEl.getAttribute("data-lazy-style") ||
+                      imgEl.src;
                   }
 
                   if (!posterUrl || posterUrl.includes("melody-lzld")) {
-                    const bgSpan = card.querySelector('[data-lazy-style], [style*="background-image"]');
+                    const bgSpan = card.querySelector(
+                      '[data-lazy-style], [style*="background-image"]',
+                    );
                     if (bgSpan) {
-                      const styleStr = bgSpan.getAttribute("data-lazy-style") || bgSpan.getAttribute("style");
+                      const styleStr =
+                        bgSpan.getAttribute("data-lazy-style") ||
+                        bgSpan.getAttribute("style");
                       const match = styleStr.match(/url\(['"]?(.*?)['"]?\)/);
                       if (match && match[1]) {
                         posterUrl = match[1];
@@ -432,19 +526,25 @@ async function movieSniffer() {
                   }
 
                   if (!posterUrl || posterUrl.includes("melody-lzld")) {
-                     const allLazy = card.querySelectorAll('[data-lazy-src], [data-src], [data-echo]');
-                     for(let el of allLazy) {
-                         const src = el.getAttribute("data-lazy-src") || el.getAttribute("data-src") || el.getAttribute("data-echo");
-                         if (src && !src.includes("melody-lzld")) {
-                             posterUrl = src;
-                             break;
-                         }
-                     }
+                    const allLazy = card.querySelectorAll(
+                      "[data-lazy-src], [data-src], [data-echo]",
+                    );
+                    for (let el of allLazy) {
+                      const src =
+                        el.getAttribute("data-lazy-src") ||
+                        el.getAttribute("data-src") ||
+                        el.getAttribute("data-echo");
+                      if (src && !src.includes("melody-lzld")) {
+                        posterUrl = src;
+                        break;
+                      }
+                    }
                   }
 
                   if (posterUrl && posterUrl.includes("melody-lzld")) {
-                      // Don't drop it, just use a fallback or keep it so we don't lose the movie!
-                      posterUrl = "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
+                    // Don't drop it, just use a fallback or keep it so we don't lose the movie!
+                    posterUrl =
+                      "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
                   }
 
                   if (
@@ -472,7 +572,9 @@ async function movieSniffer() {
                 });
                 return items;
               });
-              console.log(`🔍 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Element selection results count: ${extracted.length}`);
+              console.log(
+                `🔍 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Element selection results count: ${extracted.length}`,
+              );
 
               extracted.forEach((item) => {
                 let cleanTitle = item.title
@@ -483,7 +585,10 @@ async function movieSniffer() {
                   .replace(/اون لاين/g, "")
                   .trim();
                 let targetLink = item.link;
-                if (targetLink.includes("mycima") && targetLink.includes("watch.php")) {
+                if (
+                  targetLink.includes("mycima") &&
+                  targetLink.includes("watch.php")
+                ) {
                   targetLink = targetLink.replace("watch.php", "play.php");
                 }
                 if (
@@ -498,7 +603,7 @@ async function movieSniffer() {
                 }
               });
               console.log(
-                `✅ [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] لقطنا ${scrapedData[key].length} عنوان في حقل [${key}]`
+                `✅ [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] لقطنا ${scrapedData[key].length} عنوان في حقل [${key}]`,
               );
             }
           } catch (err) {
@@ -525,8 +630,13 @@ async function movieSniffer() {
               );
               console.log("📄 Google Search Page Title:", await page.title());
               console.log("🌐 Google Search Current URL:", page.url());
-              const bodyHTML = await page.evaluate(() => document.body ? document.body.innerHTML : "");
-              console.log("🔍 First 500 chars of Google Search HTML:", bodyHTML.substring(0, 500));
+              const bodyHTML = await page.evaluate(() =>
+                document.body ? document.body.innerHTML : "",
+              );
+              console.log(
+                "🔍 First 500 chars of Google Search HTML:",
+                bodyHTML.substring(0, 500),
+              );
 
               // 🔥 تصليح الفلترة: قشط نتايج جوجل بدون شروط استبعاد تسبب الأصفار
               const results = await page.evaluate(() => {
@@ -566,7 +676,9 @@ async function movieSniffer() {
                 });
                 return items;
               });
-              console.log(`🔍 [جوجل عربي] Extracted results count from search: ${results.length}`);
+              console.log(
+                `🔍 [جوجل عربي] Extracted results count from search: ${results.length}`,
+              );
 
               results.forEach((item) => {
                 // تنظيف العناوين الطويلة لتظهر كأسماء أفلام شيك في الـ UI
@@ -628,22 +740,29 @@ async function movieSniffer() {
 
 async function fetchCategoryFromDB(category) {
   if (mongoose.connection.readyState !== 1) {
-    console.log(`⚠️ [DB] Skip loading category ${category} because database is not connected (state: ${mongoose.connection.readyState})`);
+    console.log(
+      `⚠️ [DB] Skip loading category ${category} because database is not connected (state: ${mongoose.connection.readyState})`,
+    );
     return;
   }
   try {
     const items = await Media.find({ category });
     if (items && items.length > 0) {
-      scrapedData[category] = items.map(item => ({
+      scrapedData[category] = items.map((item) => ({
         id: item._id.toString(),
         title: item.title,
         poster: item.poster,
         targetUrl: item.url,
       }));
-      console.log(`🔌 [DB] Loaded ${scrapedData[category].length} items for category: ${category}`);
+      console.log(
+        `🔌 [DB] Loaded ${scrapedData[category].length} items for category: ${category}`,
+      );
     }
   } catch (err) {
-    console.error(`❌ [DB] Error loading category ${category} from database:`, err.message);
+    console.error(
+      `❌ [DB] Error loading category ${category} from database:`,
+      err.message,
+    );
   }
 }
 
@@ -687,10 +806,12 @@ app.get("/api/series/english", async (req, res) => {
 app.get("/api/search", async (req, res) => {
   const query = req.query.q;
   if (!query) return res.status(400).json({ error: "Search query required" });
-  
+
   let browser;
   try {
-    console.log(`🔍 [Search API] Launching Puppeteer browser in 'shell' headless mode for query: "${query}"...`);
+    console.log(
+      `🔍 [Search API] Launching Puppeteer browser in 'shell' headless mode for query: "${query}"...`,
+    );
     browser = await launchBrowser();
     console.log("🔍 [Search API] Puppeteer browser launched successfully!");
 
@@ -700,114 +821,180 @@ app.get("/api/search", async (req, res) => {
 
     const tasks = [
       { url: topCinemaUrl, source: "topcinema", key: "englishMovies" },
-      { url: myCimaUrl, source: "mycima", key: "arabicMovies" }
+      { url: myCimaUrl, source: "mycima", key: "arabicMovies" },
     ];
 
-    await Promise.all(tasks.map(async (task) => {
-      let page;
-      try {
-        console.log(`🔍 [Search API] Opening new page for source: ${task.source}`);
-        page = await browser.newPage();
-        await configurePage(page);
-        
+    await Promise.all(
+      tasks.map(async (task) => {
+        let page;
         try {
-          console.log(`🔍 [Search API] Navigating ${task.source} to: ${task.url}`);
-          await page.goto(task.url, { waitUntil: "domcontentloaded", timeout: 30000 });
-          console.log(`🔍 [Search API] Navigation completed for ${task.source}`);
-        } catch (e) {
-          console.log(`⚠️ [Search API] Navigation timeout/error for ${task.source}: ${e.message}, but continuing with extraction...`);
-        }
-        
-        console.log(`🔍 [Search API] Scrolling page for ${task.source}...`);
-        await page.evaluate(async () => {
-          for (let i = 0; i < 5; i++) {
-            window.scrollBy(0, 600);
-            await new Promise((r) => setTimeout(r, 400));
+          console.log(
+            `🔍 [Search API] Opening new page for source: ${task.source}`,
+          );
+          page = await browser.newPage();
+          await configurePage(page);
+
+          try {
+            console.log(
+              `🔍 [Search API] Navigating ${task.source} to: ${task.url}`,
+            );
+            await page.goto(task.url, {
+              waitUntil: "domcontentloaded",
+              timeout: 30000,
+            });
+            console.log(
+              `🔍 [Search API] Navigation completed for ${task.source}`,
+            );
+          } catch (e) {
+            console.log(
+              `⚠️ [Search API] Navigation timeout/error for ${task.source}: ${e.message}, but continuing with extraction...`,
+            );
           }
-        });
-        console.log(`🔍 [Search API] Scroll completed for ${task.source}. Evaluating page elements...`);
 
-        const extracted = await page.evaluate(() => {
-          const items = [];
-          const cards = document.querySelectorAll('.Small--Box, [class*="movie"], [class*="card"], .pm-video-thumb');
-          cards.forEach((card) => {
-            let validAnchor = card.tagName === "A" ? card : (card.querySelector('a:not([href*="#"])') || card.querySelector("a"));
-            let href = validAnchor?.href;
-            if (!href || !href.startsWith("http")) return;
-
-            let posterUrl = "";
-            const imgEl = card.tagName === "IMG" ? card : card.querySelector("img");
-            if (imgEl) {
-              posterUrl = imgEl.getAttribute("data-src") || imgEl.getAttribute("data-lazy-src") || imgEl.getAttribute("data-echo") || imgEl.getAttribute("data-lazy-style") || imgEl.src;
-            }
-
-            if (!posterUrl || posterUrl.includes("melody-lzld")) {
-              const bgSpan = card.querySelector('[data-lazy-style], [style*="background-image"]');
-              if (bgSpan) {
-                const styleStr = bgSpan.getAttribute("data-lazy-style") || bgSpan.getAttribute("style");
-                const match = styleStr.match(/url\(['"]?(.*?)['"]?\)/);
-                if (match && match[1]) posterUrl = match[1];
-              }
-            }
-
-            if (!posterUrl || posterUrl.includes("melody-lzld")) {
-              const allLazy = card.querySelectorAll('[data-lazy-src], [data-src], [data-echo]');
-              for(let el of allLazy) {
-                const src = el.getAttribute("data-lazy-src") || el.getAttribute("data-src") || el.getAttribute("data-echo");
-                if (src && !src.includes("melody-lzld")) {
-                  posterUrl = src;
-                  break;
-                }
-              }
-            }
-
-            if (posterUrl && posterUrl.includes("melody-lzld")) {
-                posterUrl = "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
-            }
-
-            if (!posterUrl || posterUrl.includes("logo") || posterUrl.includes("blank") || posterUrl.includes("cover.jpg")) return;
-
-            const titleEl = card.querySelector("h3") || card.querySelector(".title");
-            const titleText = titleEl ? titleEl.innerText.trim() : (imgEl?.getAttribute("alt") || "").trim();
-
-            if (titleText && titleText.length > 2) {
-              if (!items.some(i => i.link === href)) {
-                items.push({ title: titleText, poster: posterUrl, link: href });
-              }
+          console.log(`🔍 [Search API] Scrolling page for ${task.source}...`);
+          await page.evaluate(async () => {
+            for (let i = 0; i < 5; i++) {
+              window.scrollBy(0, 600);
+              await new Promise((r) => setTimeout(r, 400));
             }
           });
-          return items;
-        });
+          console.log(
+            `🔍 [Search API] Scroll completed for ${task.source}. Evaluating page elements...`,
+          );
 
-        console.log(`🔍 [Search API] Extracted ${extracted.length} raw results from ${task.source}`);
-        extracted.forEach((item) => {
-          let cleanTitle = item.title.replace(/مشاهدة/g, "").replace(/فيلم/g, "").replace(/مسلسل/g, "").replace(/مترجم/g, "").replace(/اون لاين/g, "").trim();
-          let targetLink = item.link;
-          if (targetLink.includes("mycima") && targetLink.includes("watch.php")) {
-            targetLink = targetLink.replace("watch.php", "play.php");
-          }
-          if (!results.some(r => r.targetUrl === targetLink)) {
-            results.push({
-              id: `${task.key}-${Math.random().toString(36).substr(2, 5)}`,
-              title: cleanTitle,
-              poster: item.poster,
-              targetUrl: targetLink
+          const extracted = await page.evaluate(() => {
+            const items = [];
+            const cards = document.querySelectorAll(
+              '.Small--Box, [class*="movie"], [class*="card"], .pm-video-thumb',
+            );
+            cards.forEach((card) => {
+              let validAnchor =
+                card.tagName === "A"
+                  ? card
+                  : card.querySelector('a:not([href*="#"])') ||
+                    card.querySelector("a");
+              let href = validAnchor?.href;
+              if (!href || !href.startsWith("http")) return;
+
+              let posterUrl = "";
+              const imgEl =
+                card.tagName === "IMG" ? card : card.querySelector("img");
+              if (imgEl) {
+                posterUrl =
+                  imgEl.getAttribute("data-src") ||
+                  imgEl.getAttribute("data-lazy-src") ||
+                  imgEl.getAttribute("data-echo") ||
+                  imgEl.getAttribute("data-lazy-style") ||
+                  imgEl.src;
+              }
+
+              if (!posterUrl || posterUrl.includes("melody-lzld")) {
+                const bgSpan = card.querySelector(
+                  '[data-lazy-style], [style*="background-image"]',
+                );
+                if (bgSpan) {
+                  const styleStr =
+                    bgSpan.getAttribute("data-lazy-style") ||
+                    bgSpan.getAttribute("style");
+                  const match = styleStr.match(/url\(['"]?(.*?)['"]?\)/);
+                  if (match && match[1]) posterUrl = match[1];
+                }
+              }
+
+              if (!posterUrl || posterUrl.includes("melody-lzld")) {
+                const allLazy = card.querySelectorAll(
+                  "[data-lazy-src], [data-src], [data-echo]",
+                );
+                for (let el of allLazy) {
+                  const src =
+                    el.getAttribute("data-lazy-src") ||
+                    el.getAttribute("data-src") ||
+                    el.getAttribute("data-echo");
+                  if (src && !src.includes("melody-lzld")) {
+                    posterUrl = src;
+                    break;
+                  }
+                }
+              }
+
+              if (posterUrl && posterUrl.includes("melody-lzld")) {
+                posterUrl =
+                  "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
+              }
+
+              if (
+                !posterUrl ||
+                posterUrl.includes("logo") ||
+                posterUrl.includes("blank") ||
+                posterUrl.includes("cover.jpg")
+              )
+                return;
+
+              const titleEl =
+                card.querySelector("h3") || card.querySelector(".title");
+              const titleText = titleEl
+                ? titleEl.innerText.trim()
+                : (imgEl?.getAttribute("alt") || "").trim();
+
+              if (titleText && titleText.length > 2) {
+                if (!items.some((i) => i.link === href)) {
+                  items.push({
+                    title: titleText,
+                    poster: posterUrl,
+                    link: href,
+                  });
+                }
+              }
             });
-          }
-        });
-      } catch (err) {
-        console.error(`❌ [Search API] Search error on ${task.source}:`, err.message);
-      } finally {
-        if (page) {
-          try {
-            console.log(`🔍 [Search API] Closing page for source: ${task.source}`);
-            await page.close();
-          } catch (e) {
-            console.error("Error closing search task page:", e.message);
+            return items;
+          });
+
+          console.log(
+            `🔍 [Search API] Extracted ${extracted.length} raw results from ${task.source}`,
+          );
+          extracted.forEach((item) => {
+            let cleanTitle = item.title
+              .replace(/مشاهدة/g, "")
+              .replace(/فيلم/g, "")
+              .replace(/مسلسل/g, "")
+              .replace(/مترجم/g, "")
+              .replace(/اون لاين/g, "")
+              .trim();
+            let targetLink = item.link;
+            if (
+              targetLink.includes("mycima") &&
+              targetLink.includes("watch.php")
+            ) {
+              targetLink = targetLink.replace("watch.php", "play.php");
+            }
+            if (!results.some((r) => r.targetUrl === targetLink)) {
+              results.push({
+                id: `${task.key}-${Math.random().toString(36).substr(2, 5)}`,
+                title: cleanTitle,
+                poster: item.poster,
+                targetUrl: targetLink,
+              });
+            }
+          });
+        } catch (err) {
+          console.error(
+            `❌ [Search API] Search error on ${task.source}:`,
+            err.message,
+          );
+        } finally {
+          if (page) {
+            try {
+              console.log(
+                `🔍 [Search API] Closing page for source: ${task.source}`,
+              );
+              await page.close();
+            } catch (e) {
+              console.error("Error closing search task page:", e.message);
+            }
           }
         }
-      }
-    }));
+      }),
+    );
 
     res.json(results);
   } catch (err) {
@@ -838,7 +1025,7 @@ async function getOrSniffStream(url) {
   if (!url) return null;
   const cleanUrl = cleanMovieUrl(url);
   const cached = streamCache.get(cleanUrl);
-  if (cached && (Date.now() - cached.timestamp < 10 * 60 * 1000)) {
+  if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
     console.log(`⚡ [Cache Hit] Stream found in cache for: ${cleanUrl}`);
     return cached;
   }
@@ -848,10 +1035,14 @@ async function getOrSniffStream(url) {
   let caughtStream = null;
   let fallbackEmbedUrl = null;
   let resolveStream;
-  const streamPromise = new Promise((resolve) => { resolveStream = resolve; });
+  const streamPromise = new Promise((resolve) => {
+    resolveStream = resolve;
+  });
 
   try {
-    console.log(`🔍 [Sniffer] Launching Puppeteer browser with 'shell' headless mode for: ${cleanUrl}...`);
+    console.log(
+      `🔍 [Sniffer] Launching Puppeteer browser with 'shell' headless mode for: ${cleanUrl}...`,
+    );
     browser = await launchBrowser();
     console.log("🔍 [Sniffer] Puppeteer browser launched successfully!");
 
@@ -868,15 +1059,28 @@ async function getOrSniffStream(url) {
 
         // Block known ad/tracker domains to speed things up
         if (
-          reqUrl.includes("popads") || reqUrl.includes("adsterra") ||
-          reqUrl.includes("analytics") || reqUrl.includes("doubleclick") ||
-          reqUrl.includes("onclick") || reqUrl.includes("exoclick")
-        ) { r.abort().catch(() => {}); return; }
+          reqUrl.includes("popads") ||
+          reqUrl.includes("adsterra") ||
+          reqUrl.includes("analytics") ||
+          reqUrl.includes("doubleclick") ||
+          reqUrl.includes("onclick") ||
+          reqUrl.includes("exoclick")
+        ) {
+          r.abort().catch(() => {});
+          return;
+        }
 
         // Catch stream URLs
-        if ((reqUrl.includes(".m3u8") || reqUrl.includes(".mp4") || reqUrl.includes(".ts")) && !caughtStream) {
+        if (
+          (reqUrl.includes(".m3u8") ||
+            reqUrl.includes(".mp4") ||
+            reqUrl.includes(".ts")) &&
+          !caughtStream
+        ) {
           if (!reqUrl.includes("google") && !reqUrl.includes("facebook")) {
-            console.log(`🎯 [Sniffer] ✅ Caught stream via network: ${r.url()}`);
+            console.log(
+              `🎯 [Sniffer] ✅ Caught stream via network: ${r.url()}`,
+            );
             caughtStream = r.url();
             resolveStream(caughtStream);
           }
@@ -890,10 +1094,15 @@ async function getOrSniffStream(url) {
     // ── Step 1: Navigate to movie page (tolerate timeout — content may already be in DOM) ──
     console.log(`🔍 [Sniffer] Navigating to movie page: ${cleanUrl}`);
     try {
-      await page.goto(cleanUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+      await page.goto(cleanUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 60000,
+      });
       console.log("🔍 [Sniffer] Movie page loaded. Title:", await page.title());
     } catch (e) {
-      console.log(`⚠️ [Sniffer] Navigation timeout (will still try extraction): ${e.message}`);
+      console.log(
+        `⚠️ [Sniffer] Navigation timeout (will still try extraction): ${e.message}`,
+      );
       // Give the browser 5 extra seconds after partial load
       await new Promise((r) => setTimeout(r, 5000));
     }
@@ -906,24 +1115,35 @@ async function getOrSniffStream(url) {
         // 1. Check all iframes
         const iframes = Array.from(document.querySelectorAll("iframe"));
         for (let iframe of iframes) {
-          const src = iframe.src || iframe.getAttribute("data-src") || iframe.getAttribute("data-lazy-src");
+          const src =
+            iframe.src ||
+            iframe.getAttribute("data-src") ||
+            iframe.getAttribute("data-lazy-src");
           if (src && src.startsWith("http")) return src;
         }
         // 2. Check video elements directly
-        const videos = Array.from(document.querySelectorAll("video source, video[src]"));
+        const videos = Array.from(
+          document.querySelectorAll("video source, video[src]"),
+        );
         for (let v of videos) {
           const src = v.src || v.getAttribute("data-src");
           if (src && src.startsWith("http")) return src;
         }
         // 3. Scan inline scripts for m3u8 URLs
-        const scripts = Array.from(document.querySelectorAll("script:not([src])"));
+        const scripts = Array.from(
+          document.querySelectorAll("script:not([src])"),
+        );
         for (let s of scripts) {
-          const m = (s.textContent || "").match(/["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/);
+          const m = (s.textContent || "").match(
+            /["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/,
+          );
           if (m) return m[1];
         }
         return null;
       });
-      console.log(`🔍 [Sniffer] Embed URL extracted: ${embedUrl || "none found"}`);
+      console.log(
+        `🔍 [Sniffer] Embed URL extracted: ${embedUrl || "none found"}`,
+      );
     } catch (evalErr) {
       console.log(`⚠️ [Sniffer] DOM evaluation error: ${evalErr.message}`);
     }
@@ -935,12 +1155,19 @@ async function getOrSniffStream(url) {
 
       // Also intercept responses to catch m3u8 by Content-Type
       // (some players use CDN URLs that don't contain .m3u8 in the path)
-      page.on('response', async (response) => {
+      page.on("response", async (response) => {
         try {
           const respUrl = response.url();
-          const ct = response.headers()['content-type'] || '';
-          if ((ct.includes('mpegurl') || ct.includes('x-mpegURL') || ct.includes('m3u8')) && !caughtStream) {
-            console.log(`🎯 [Sniffer] ✅ Caught m3u8 via response Content-Type: ${respUrl}`);
+          const ct = response.headers()["content-type"] || "";
+          if (
+            (ct.includes("mpegurl") ||
+              ct.includes("x-mpegURL") ||
+              ct.includes("m3u8")) &&
+            !caughtStream
+          ) {
+            console.log(
+              `🎯 [Sniffer] ✅ Caught m3u8 via response Content-Type: ${respUrl}`,
+            );
             caughtStream = respUrl;
             resolveStream(respUrl);
           }
@@ -948,8 +1175,14 @@ async function getOrSniffStream(url) {
       });
 
       try {
-        await page.goto(embedUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
-        console.log("🔍 [Sniffer] Embed player loaded. Title:", await page.title());
+        await page.goto(embedUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        });
+        console.log(
+          "🔍 [Sniffer] Embed player loaded. Title:",
+          await page.title(),
+        );
       } catch (e) {
         console.log(`⚠️ [Sniffer] Embed navigation warning: ${e.message}`);
         await new Promise((r) => setTimeout(r, 5000));
@@ -958,12 +1191,14 @@ async function getOrSniffStream(url) {
       // Wait up to 25s for network interceptor to catch a stream
       await Promise.race([
         streamPromise,
-        new Promise((r) => setTimeout(r, 25000))
+        new Promise((r) => setTimeout(r, 25000)),
       ]);
 
       // ── Step 3b: Extract from JS player APIs (JW Player, VideoJS, Plyr, etc.) ──
       if (!caughtStream) {
-        console.log("🔍 [Sniffer] Trying to extract stream from JS player APIs...");
+        console.log(
+          "🔍 [Sniffer] Trying to extract stream from JS player APIs...",
+        );
         try {
           const playerSrc = await page.evaluate(() => {
             // 1. JW Player
@@ -972,8 +1207,12 @@ async function getOrSniffStream(url) {
                 const p = window.jwplayer();
                 if (p && p.getConfig) {
                   const cfg = p.getConfig();
-                  const file = cfg.file ||
-                    (cfg.playlist && cfg.playlist[0] && (cfg.playlist[0].file || cfg.playlist[0].sources?.[0]?.file));
+                  const file =
+                    cfg.file ||
+                    (cfg.playlist &&
+                      cfg.playlist[0] &&
+                      (cfg.playlist[0].file ||
+                        cfg.playlist[0].sources?.[0]?.file));
                   if (file) return file;
                 }
                 // also try getPlaylist
@@ -989,7 +1228,8 @@ async function getOrSniffStream(url) {
               if (window.videojs && window.videojs.players) {
                 for (let key of Object.keys(window.videojs.players)) {
                   const p = window.videojs.players[key];
-                  if (p && p.currentSrc && p.currentSrc()) return p.currentSrc();
+                  if (p && p.currentSrc && p.currentSrc())
+                    return p.currentSrc();
                   if (p && p.src && p.src()) return p.src();
                 }
               }
@@ -999,16 +1239,20 @@ async function getOrSniffStream(url) {
             try {
               if (window.player && window.player.source) {
                 const src = window.player.source;
-                if (typeof src === 'string') return src;
+                if (typeof src === "string") return src;
               }
             } catch (e) {}
 
             // 4. Scan all inline scripts for any m3u8 or mp4 URL
-            const scripts = Array.from(document.querySelectorAll('script:not([src])'));
+            const scripts = Array.from(
+              document.querySelectorAll("script:not([src])"),
+            );
             for (let s of scripts) {
-              const text = s.textContent || '';
+              const text = s.textContent || "";
               // m3u8
-              let m = text.match(/["'`](https?:\/\/[^"'`\s]+\.m3u8[^"'`\s]*)["'`]/);
+              let m = text.match(
+                /["'`](https?:\/\/[^"'`\s]+\.m3u8[^"'`\s]*)["'`]/,
+              );
               if (m) return m[1];
               // mp4
               m = text.match(/["'`](https?:\/\/[^"'`\s]+\.mp4[^"'`\s]*)["'`]/);
@@ -1016,57 +1260,76 @@ async function getOrSniffStream(url) {
             }
 
             // 5. Check video[src] directly
-            const vid = document.querySelector('video[src], video source[src]');
-            if (vid) return vid.src || vid.getAttribute('src');
+            const vid = document.querySelector("video[src], video source[src]");
+            if (vid) return vid.src || vid.getAttribute("src");
 
             return null;
           });
 
           if (playerSrc && !caughtStream) {
-            console.log(`🎯 [Sniffer] ✅ Extracted stream from JS player: ${playerSrc}`);
+            console.log(
+              `🎯 [Sniffer] ✅ Extracted stream from JS player: ${playerSrc}`,
+            );
             caughtStream = playerSrc;
           }
         } catch (evalErr) {
-          console.log(`⚠️ [Sniffer] JS player extraction error: ${evalErr.message}`);
+          console.log(
+            `⚠️ [Sniffer] JS player extraction error: ${evalErr.message}`,
+          );
         }
       }
 
       // ── Step 3c: Check for nested iframe inside embed player ──
       if (!caughtStream) {
-        console.log("🔍 [Sniffer] Checking for nested iframes inside embed player...");
+        console.log(
+          "🔍 [Sniffer] Checking for nested iframes inside embed player...",
+        );
         try {
           const nestedEmbed = await page.evaluate(() => {
-            const iframes = Array.from(document.querySelectorAll('iframe'));
+            const iframes = Array.from(document.querySelectorAll("iframe"));
             for (let f of iframes) {
-              const src = f.src || f.getAttribute('data-src');
-              if (src && src.startsWith('http')) return src;
+              const src = f.src || f.getAttribute("data-src");
+              if (src && src.startsWith("http")) return src;
             }
             return null;
           });
           if (nestedEmbed && nestedEmbed !== embedUrl) {
             console.log(`🔍 [Sniffer] Found nested player: ${nestedEmbed}`);
             try {
-              await page.goto(nestedEmbed, { waitUntil: "domcontentloaded", timeout: 30000 });
-            } catch (e) { await new Promise(r => setTimeout(r, 3000)); }
+              await page.goto(nestedEmbed, {
+                waitUntil: "domcontentloaded",
+                timeout: 30000,
+              });
+            } catch (e) {
+              await new Promise((r) => setTimeout(r, 3000));
+            }
             await Promise.race([
               streamPromise,
-              new Promise((r) => setTimeout(r, 15000))
+              new Promise((r) => setTimeout(r, 15000)),
             ]);
             // Try JS extraction again on nested player
             if (!caughtStream) {
               try {
                 const nestedSrc = await page.evaluate(() => {
-                  const vid = document.querySelector('video[src], video source[src]');
-                  if (vid) return vid.src || vid.getAttribute('src');
-                  const scripts = Array.from(document.querySelectorAll('script:not([src])'));
+                  const vid = document.querySelector(
+                    "video[src], video source[src]",
+                  );
+                  if (vid) return vid.src || vid.getAttribute("src");
+                  const scripts = Array.from(
+                    document.querySelectorAll("script:not([src])"),
+                  );
                   for (let s of scripts) {
-                    const m = (s.textContent || '').match(/["'`](https?:\/\/[^"'`\s]+\.m3u8[^"'`\s]*)["'`]/);
+                    const m = (s.textContent || "").match(
+                      /["'`](https?:\/\/[^"'`\s]+\.m3u8[^"'`\s]*)["'`]/,
+                    );
                     if (m) return m[1];
                   }
                   return null;
                 });
                 if (nestedSrc) {
-                  console.log(`🎯 [Sniffer] ✅ Caught stream from nested player JS: ${nestedSrc}`);
+                  console.log(
+                    `🎯 [Sniffer] ✅ Caught stream from nested player JS: ${nestedSrc}`,
+                  );
                   caughtStream = nestedSrc;
                 }
               } catch (e) {}
@@ -1076,42 +1339,136 @@ async function getOrSniffStream(url) {
           console.log(`⚠️ [Sniffer] Nested check error: ${nestedErr.message}`);
         }
       }
-
     } else {
       // No embed iframe — just wait for direct network stream
-      console.log("🔍 [Sniffer] No embed iframe found — waiting for direct network stream...");
+      console.log(
+        "🔍 [Sniffer] No embed iframe found — waiting for direct network stream...",
+      );
       await Promise.race([
         streamPromise,
-        new Promise((r) => setTimeout(r, 25000))
+        new Promise((r) => setTimeout(r, 25000)),
       ]);
     }
-
   } catch (err) {
     console.error(`❌ Sniffer error:`, err.message);
   } finally {
-    if (browser) { try { await browser.close(); } catch(e) {} }
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (e) {}
+    }
   }
 
   // Prefer the direct caught m3u8 stream — only fall back to iframe as last resort
-  const finalStream = caughtStream || (fallbackEmbedUrl ? fallbackEmbedUrl : null);
-  console.log(`🔍 [Sniffer] Result → stream: ${caughtStream || "none"}, embed: ${fallbackEmbedUrl || "none"}`);
+  const finalStream =
+    caughtStream || (fallbackEmbedUrl ? fallbackEmbedUrl : null);
+  console.log(
+    `🔍 [Sniffer] Result → stream: ${caughtStream || "none"}, embed: ${fallbackEmbedUrl || "none"}`,
+  );
   if (finalStream) {
     // If we only have an iframe (no m3u8), log a warning
     if (!caughtStream && fallbackEmbedUrl) {
-      console.log(`⚠️ [Sniffer] Returning iframe fallback — ads may appear in player`);
+      console.log(
+        `⚠️ [Sniffer] Returning iframe fallback — ads may appear in player`,
+      );
     }
     const data = {
       streamUrl: finalStream,
       type: caughtStream
-        ? (caughtStream.includes(".m3u8") ? "hls" : "direct")
+        ? caughtStream.includes(".m3u8")
+          ? "hls"
+          : "direct"
         : "iframe",
       referer: cleanUrl,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
     streamCache.set(cleanUrl, data);
     return data;
   }
   return null;
+}
+
+function isValidStreamLink(urlStr, sourceUrl) {
+  if (!urlStr || !urlStr.startsWith("http")) return false;
+  try {
+    const url = new URL(urlStr);
+    const hostname = url.hostname.toLowerCase();
+    const pathname = url.pathname.toLowerCase();
+
+    // 1. Blacklisted domains (ads, spam blogs, social media)
+    const blockedDomains = [
+      "poiy.online",
+      "fila7lam.com",
+      "blogspot.com",
+      "wordpress.com",
+      "google.com",
+      "facebook.com",
+      "twitter.com",
+      "instagram.com",
+      "telegram.me",
+      "t.me",
+      "whatsapp.com",
+      "youtube.com",
+      "pinterest.com",
+      "doubleclick.net",
+      "adservice",
+      "analytics",
+    ];
+    if (blockedDomains.some((d) => hostname.includes(d))) return false;
+
+    // 2. Blog post patterns (e.g. /2026/06/ or /2025/11/)
+    if (/\/\d{4}\/\d{2}\//.test(pathname)) return false;
+
+    // 3. Spam/Ad keywords in pathname
+    const spamKeywords = [
+      "scholarship",
+      "insurance",
+      "loan",
+      "credit",
+      "investing",
+      "marketing",
+      "finance",
+      "wealth",
+      "estate",
+      "download",
+      "ads",
+      "click",
+      "privacy-policy",
+      "contact-us",
+      "about-us",
+      "terms-of-service",
+      "terms-and-conditions",
+      "dmca",
+    ];
+    if (spamKeywords.some((kw) => pathname.includes(kw))) return false;
+
+    // 4. If it's external, ensure it has match-related keywords or at least doesn't look like generic spam
+    const sourceHost = new URL(sourceUrl).hostname.toLowerCase();
+    if (!hostname.includes(sourceHost.replace("www.", ""))) {
+      // It's an external domain link
+      const sportsKeywords = [
+        "match",
+        "kora",
+        "live",
+        "stream",
+        "shoot",
+        "player",
+        "tv",
+        "bein",
+        "ch",
+        "koora",
+        "yalla",
+      ];
+      const hasSportsKw = sportsKeywords.some(
+        (kw) => hostname.includes(kw) || pathname.includes(kw),
+      );
+      if (!hasSportsKw) return false;
+    }
+
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 async function masterSniffer() {
@@ -1120,7 +1477,9 @@ async function masterSniffer() {
   let browser;
 
   try {
-    console.log("🥷 [Slayer Scraper] Launching Puppeteer browser with 'shell' headless mode...");
+    console.log(
+      "🥷 [Slayer Scraper] Launching Puppeteer browser with 'shell' headless mode...",
+    );
     browser = await launchBrowser();
     console.log("🥷 [Slayer Scraper] Puppeteer browser launched successfully!");
 
@@ -1144,11 +1503,21 @@ async function masterSniffer() {
 
         // Navigate
         console.log(`🎯 [Slayer Scraper] Navigating to: ${url}`);
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-        console.log(`🎯 [Slayer Scraper] Loaded: ${await page.title()} | ${page.url()}`);
-        await new Promise((r) => setTimeout(r, 3000));
-        
-        console.log(`🎯 [Slayer Scraper] Evaluating match elements on page: ${url}`);
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+        console.log("📄 Page Title:", await page.title());
+        console.log("🌐 Current URL:", page.url());
+        const bodyHTML = await page.evaluate(() =>
+          document.body ? document.body.innerHTML : "",
+        );
+        console.log("🔍 First 500 chars of HTML:", bodyHTML.substring(0, 500));
+        console.log(
+          `🎯 [Slayer Scraper] Navigation completed. Waiting 4 seconds for stabilization...`,
+        );
+        await new Promise((r) => setTimeout(r, 4000));
+
+        console.log(
+          `🎯 [Slayer Scraper] Evaluating match elements on page: ${url}`,
+        );
         const extractedLinks = await page.evaluate(() => {
           const items = [];
 
@@ -1200,7 +1569,9 @@ async function masterSniffer() {
           return items;
         });
 
-        console.log(`🎯 [Slayer Scraper] Extracted ${extractedLinks.length} links from ${url}`);
+        console.log(
+          `🎯 [Slayer Scraper] Extracted ${extractedLinks.length} links from ${url}`,
+        );
         if (extractedLinks.length > 0) {
           extractedLinks.forEach((item) => {
             // تنظيف أحرف الـ HTML
@@ -1235,9 +1606,13 @@ async function masterSniffer() {
               targetSiteUrl: item.link,
             });
           });
-          console.log(`✅ [نجاح] تم قشط ${extractedLinks.length} رابط من الموقع الحالي: ${url}`);
+          console.log(
+            `✅ [نجاح] تم قشط ${extractedLinks.length} رابط من الموقع الحالي: ${url}`,
+          );
         } else {
-          console.log(`⚠️ الموقع فتح بنجاح ولكن جدول مبارياته فارغ حالياً: ${url}`);
+          console.log(
+            `⚠️ الموقع فتح بنجاح ولكن جدول مبارياته فارغ حالياً: ${url}`,
+          );
         }
       } catch (err) {
         console.log(`❌ فشل تحميل أو معالجة ${url}:`, err.message);
@@ -1338,8 +1713,10 @@ async function masterSniffer() {
     try {
       const cached = await Match.find({});
       if (cached && cached.length > 0) {
-        console.log(`🔌 [DB] Loaded ${cached.length} cached matches from database instead of demo data.`);
-        scrapedMatches = cached.map(c => ({
+        console.log(
+          `🔌 [DB] Loaded ${cached.length} cached matches from database instead of demo data.`,
+        );
+        scrapedMatches = cached.map((c) => ({
           id: c.matchId,
           teamA: c.teamA,
           teamB: c.teamB,
@@ -1353,7 +1730,10 @@ async function masterSniffer() {
         loadFallback();
       }
     } catch (err) {
-      console.error("❌ [DB] Error loading fallback matches from database:", err.message);
+      console.error(
+        "❌ [DB] Error loading fallback matches from database:",
+        err.message,
+      );
       loadFallback();
     }
   }
@@ -1544,16 +1924,20 @@ app.get("/api/media/stream", async (req, res) => {
 
   targetUrl = cleanMovieUrl(targetUrl);
   console.log(`🎬 [Media Stream API] Cache-First request for: ${targetUrl}`);
-  
+
   try {
     // 1. Check MongoDB first (Cache-First)
     const cached = await Media.findOne({ url: targetUrl });
     if (cached && cached.streamUrl) {
-      console.log(`⚡ [Cache Hit - DB] Found stream in database for: ${targetUrl}`);
+      console.log(
+        `⚡ [Cache Hit - DB] Found stream in database for: ${targetUrl}`,
+      );
       return res.json({ streamUrl: cached.streamUrl, type: cached.type });
     }
-    
-    console.log(`🔍 [Cache Miss - DB] Sniffing stream using Puppeteer for: ${targetUrl}`);
+
+    console.log(
+      `🔍 [Cache Miss - DB] Sniffing stream using Puppeteer for: ${targetUrl}`,
+    );
     // 2. Fallback to Puppeteer if not in DB or streamUrl is missing
     const result = await getOrSniffStream(targetUrl);
     if (result && result.streamUrl) {
@@ -1564,14 +1948,21 @@ app.get("/api/media/stream", async (req, res) => {
           url: targetUrl,
           streamUrl: result.streamUrl,
           type: result.type,
-          fetchedAt: new Date()
+          fetchedAt: new Date(),
         },
-        { upsert: true, new: true }
-      ).catch(err => console.error("❌ Failed to update DB on fallback stream sniff:", err.message));
-      
+        { upsert: true, new: true },
+      ).catch((err) =>
+        console.error(
+          "❌ Failed to update DB on fallback stream sniff:",
+          err.message,
+        ),
+      );
+
       return res.json({ streamUrl: result.streamUrl, type: result.type });
     } else {
-      return res.status(404).json({ error: "لم يتم العثور على رابط بث نظيف حالياً" });
+      return res
+        .status(404)
+        .json({ error: "لم يتم العثور على رابط بث نظيف حالياً" });
     }
   } catch (err) {
     console.error(`❌ Error in /api/media/stream:`, err.message);
@@ -1584,7 +1975,7 @@ function startFfmpeg(url, res, req, referer) {
   const ffmpegBin = getFfmpegPath();
 
   const args = [];
-  if (typeof referer !== 'undefined' && referer) {
+  if (typeof referer !== "undefined" && referer) {
     args.push(
       "-user_agent",
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -1627,7 +2018,9 @@ function startFfmpeg(url, res, req, referer) {
 
 // Hourly Cron Job using node-cron (0 * * * * = every hour)
 cron.schedule("0 * * * *", async () => {
-  console.log("⏰ [Cron] Starting hourly movie scraping and stream sniffing job...");
+  console.log(
+    "⏰ [Cron] Starting hourly movie scraping and stream sniffing job...",
+  );
   try {
     await runHourlyCronJob();
   } catch (err) {
@@ -1638,32 +2031,45 @@ cron.schedule("0 * * * *", async () => {
 async function runHourlyCronJob() {
   console.log("🎬 [Cron Job] Running movieSniffer to update movie lists...");
   await movieSniffer();
-  
-  const categories = ["arabicMovies", "englishMovies", "arabicSeries", "englishSeries"];
-  
+
+  const categories = [
+    "arabicMovies",
+    "englishMovies",
+    "arabicSeries",
+    "englishSeries",
+  ];
+
   for (const category of categories) {
     const items = scrapedData[category] || [];
-    console.log(`🎬 [Cron Job] Processing ${items.length} items in category: ${category}`);
-    
+    console.log(
+      `🎬 [Cron Job] Processing ${items.length} items in category: ${category}`,
+    );
+
     for (const item of items) {
       try {
         const existing = await Media.findOne({ url: item.targetUrl });
         const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-        
+
         let streamInfo = null;
-        if (existing && existing.streamUrl && existing.fetchedAt > twoHoursAgo) {
+        if (
+          existing &&
+          existing.streamUrl &&
+          existing.fetchedAt > twoHoursAgo
+        ) {
           console.log(`[Cron] Using cached stream for ${item.title}`);
           streamInfo = {
             streamUrl: existing.streamUrl,
-            type: existing.type
+            type: existing.type,
           };
         } else {
-          console.log(`[Cron] Sniffing stream for ${item.title} (${item.targetUrl})...`);
+          console.log(
+            `[Cron] Sniffing stream for ${item.title} (${item.targetUrl})...`,
+          );
           // Wait a short delay to be nice to websites
-          await new Promise(r => setTimeout(r, 2000));
+          await new Promise((r) => setTimeout(r, 2000));
           streamInfo = await getOrSniffStream(item.targetUrl);
         }
-        
+
         if (streamInfo && streamInfo.streamUrl) {
           await Media.findOneAndUpdate(
             { url: item.targetUrl },
@@ -1673,11 +2079,16 @@ async function runHourlyCronJob() {
               poster: item.poster,
               streamUrl: streamInfo.streamUrl,
               type: streamInfo.type,
-              platform: item.targetUrl.includes("topcinema") ? "topcinema" : (item.targetUrl.includes("arabseed") || item.targetUrl.includes("asd") ? "arabseed" : "other"),
+              platform: item.targetUrl.includes("topcinema")
+                ? "topcinema"
+                : item.targetUrl.includes("arabseed") ||
+                    item.targetUrl.includes("asd")
+                  ? "arabseed"
+                  : "other",
               category: category,
-              fetchedAt: new Date()
+              fetchedAt: new Date(),
             },
-            { upsert: true, new: true }
+            { upsert: true, new: true },
           );
           console.log(`✅ [Cron] Upserted stream for: ${item.title}`);
         } else {
@@ -1687,15 +2098,25 @@ async function runHourlyCronJob() {
               title: item.title,
               url: item.targetUrl,
               poster: item.poster,
-              platform: item.targetUrl.includes("topcinema") ? "topcinema" : (item.targetUrl.includes("arabseed") || item.targetUrl.includes("asd") ? "arabseed" : "other"),
-              category: category
+              platform: item.targetUrl.includes("topcinema")
+                ? "topcinema"
+                : item.targetUrl.includes("arabseed") ||
+                    item.targetUrl.includes("asd")
+                  ? "arabseed"
+                  : "other",
+              category: category,
             },
-            { upsert: true, new: true }
+            { upsert: true, new: true },
           );
-          console.log(`⚠️ [Cron] Saved metadata only (sniff failed) for: ${item.title}`);
+          console.log(
+            `⚠️ [Cron] Saved metadata only (sniff failed) for: ${item.title}`,
+          );
         }
       } catch (err) {
-        console.error(`❌ [Cron] Error processing item ${item.title}:`, err.message);
+        console.error(
+          `❌ [Cron] Error processing item ${item.title}:`,
+          err.message,
+        );
       }
     }
   }
@@ -1705,13 +2126,13 @@ async function runHourlyCronJob() {
 // Initialize startup tasks immediately on boot
 async function initializeStartup() {
   console.log("🚀 Restoring cache from DB on startup...");
-  
+
   if (mongoose.connection.readyState === 1) {
     // استعادة مباريات اليوم من قاعدة البيانات لتجنب البيانات الوهمية
     try {
       const cachedMatches = await Match.find({});
       if (cachedMatches && cachedMatches.length > 0) {
-        scrapedMatches = cachedMatches.map(c => ({
+        scrapedMatches = cachedMatches.map((c) => ({
           id: c.matchId,
           teamA: c.teamA,
           teamB: c.teamB,
@@ -1720,7 +2141,9 @@ async function initializeStartup() {
           targetSiteUrl: c.targetSiteUrl,
           alternativeUrls: c.alternativeUrls,
         }));
-        console.log(`🔌 [DB] Loaded ${scrapedMatches.length} cached matches from database.`);
+        console.log(
+          `🔌 [DB] Loaded ${scrapedMatches.length} cached matches from database.`,
+        );
       } else {
         console.log("🔄 No cached matches in DB, loading fallback...");
         loadFallback();
@@ -1730,20 +2153,31 @@ async function initializeStartup() {
       loadFallback();
     }
 
-    const categories = ["arabicMovies", "englishMovies", "arabicSeries", "englishSeries"];
+    const categories = [
+      "arabicMovies",
+      "englishMovies",
+      "arabicSeries",
+      "englishSeries",
+    ];
     for (const cat of categories) {
       await fetchCategoryFromDB(cat);
     }
   } else {
-    console.log(`⚠️ [DB] MongoDB not connected yet (state: ${mongoose.connection.readyState}). Skipping cache restore, loading fallback matches.`);
+    console.log(
+      `⚠️ [DB] MongoDB not connected yet (state: ${mongoose.connection.readyState}). Skipping cache restore, loading fallback matches.`,
+    );
     loadFallback();
   }
-  
+
   console.log("🚀 Starting initial movie scraping and sniffing job...");
-  runHourlyCronJob().catch(err => console.error("Error running initial cron job:", err));
+  runHourlyCronJob().catch((err) =>
+    console.error("Error running initial cron job:", err),
+  );
 }
 
 initializeStartup();
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`🚀 Slayer Scraper Running on Port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`🚀 Slayer Scraper Running on Port ${PORT}`),
+);
