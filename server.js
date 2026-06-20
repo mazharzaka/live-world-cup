@@ -147,7 +147,6 @@ async function launchBrowser() {
     '--disable-gpu',                   // no GPU needed in headless
     '--disable-accelerated-2d-canvas', // remove canvas GPU layer
     '--no-zygote',                     // skip zygote process (saves ~30 MB)
-    '--single-process',                // run renderer in browser process (saves ~50 MB)
     '--disable-extensions',            // no extensions
     '--disable-background-networking', // no background HTTP calls
     '--disable-background-timer-throttling',
@@ -754,52 +753,32 @@ async function fetchCategoryFromDB(category) {
         poster: item.poster,
         targetUrl: item.url,
       }));
-      console.log(
-        `🔌 [DB] Loaded ${scrapedData[category].length} items for category: ${category}`,
-      );
+      console.log(`🔌 [DB] Loaded ${scrapedData[category].length} items for category: ${category}`);
     }
   } catch (err) {
-    console.error(
-      `❌ [DB] Error loading category ${category} from database:`,
-      err.message,
-    );
+    console.error(`❌ [DB] Error loading category ${category}:`, err.message);
   }
 }
 
-// 4️⃣ رابعاً: تحديث الـ Endpoint عشان ترجع الداتا المتفصصة دي
-// 1. Endpoint الأفلام العربي
+// ── Category Endpoints ──
 app.get("/api/movies/arabic", async (req, res) => {
-  console.log("🎬 [API] طلب قائمة الأفلام العربية...");
-  if (!scrapedData.arabicMovies || scrapedData.arabicMovies.length === 0) {
+  if (!scrapedData.arabicMovies || scrapedData.arabicMovies.length === 0)
     await fetchCategoryFromDB("arabicMovies");
-  }
   res.json(scrapedData.arabicMovies);
 });
-
-// 2. Endpoint الأفلام الأجنبي
 app.get("/api/movies/english", async (req, res) => {
-  console.log("🎬 [API] طلب قائمة الأفلام الأجنبية...");
-  if (!scrapedData.englishMovies || scrapedData.englishMovies.length === 0) {
+  if (!scrapedData.englishMovies || scrapedData.englishMovies.length === 0)
     await fetchCategoryFromDB("englishMovies");
-  }
   res.json(scrapedData.englishMovies);
 });
-
-// 3. Endpoint المسلسلات العربي
 app.get("/api/series/arabic", async (req, res) => {
-  console.log("📺 [API] طلب قائمة المسلسلات العربية...");
-  if (!scrapedData.arabicSeries || scrapedData.arabicSeries.length === 0) {
+  if (!scrapedData.arabicSeries || scrapedData.arabicSeries.length === 0)
     await fetchCategoryFromDB("arabicSeries");
-  }
   res.json(scrapedData.arabicSeries);
 });
-
-// 4. Endpoint المسلسلات الأجنبي
 app.get("/api/series/english", async (req, res) => {
-  console.log("📺 [API] طلب قائمة المسلسلات الأجنبية...");
-  if (!scrapedData.englishSeries || scrapedData.englishSeries.length === 0) {
+  if (!scrapedData.englishSeries || scrapedData.englishSeries.length === 0)
     await fetchCategoryFromDB("englishSeries");
-  }
   res.json(scrapedData.englishSeries);
 });
 
@@ -807,213 +786,101 @@ app.get("/api/search", async (req, res) => {
   const query = req.query.q;
   if (!query) return res.status(400).json({ error: "Search query required" });
 
-  let browser;
-  try {
-    console.log(
-      `🔍 [Search API] Launching Puppeteer browser in 'shell' headless mode for query: "${query}"...`,
-    );
-    browser = await launchBrowser();
-    console.log("🔍 [Search API] Puppeteer browser launched successfully!");
+  const q = query.toLowerCase().trim();
+  console.log("[Search API] Query:", q);
 
-    const results = [];
-    const topCinemaUrl = `https://web.topcinemaa.com/search/?query=${encodeURIComponent(query)}&type=all`;
-    const myCimaUrl = `https://vid.mycima.cc/search.php?keywords=${encodeURIComponent(query)}&video-id=`;
-
-    const tasks = [
-      { url: topCinemaUrl, source: "topcinema", key: "englishMovies" },
-      { url: myCimaUrl, source: "mycima", key: "arabicMovies" },
-    ];
-
-    await Promise.all(
-      tasks.map(async (task) => {
-        let page;
-        try {
-          console.log(
-            `🔍 [Search API] Opening new page for source: ${task.source}`,
-          );
-          page = await browser.newPage();
-          await configurePage(page);
-
-          try {
-            console.log(
-              `🔍 [Search API] Navigating ${task.source} to: ${task.url}`,
-            );
-            await page.goto(task.url, {
-              waitUntil: "domcontentloaded",
-              timeout: 30000,
-            });
-            console.log(
-              `🔍 [Search API] Navigation completed for ${task.source}`,
-            );
-          } catch (e) {
-            console.log(
-              `⚠️ [Search API] Navigation timeout/error for ${task.source}: ${e.message}, but continuing with extraction...`,
-            );
-          }
-
-          console.log(`🔍 [Search API] Scrolling page for ${task.source}...`);
-          await page.evaluate(async () => {
-            for (let i = 0; i < 5; i++) {
-              window.scrollBy(0, 600);
-              await new Promise((r) => setTimeout(r, 400));
-            }
-          });
-          console.log(
-            `🔍 [Search API] Scroll completed for ${task.source}. Evaluating page elements...`,
-          );
-
-          const extracted = await page.evaluate(() => {
-            const items = [];
-            const cards = document.querySelectorAll(
-              '.Small--Box, [class*="movie"], [class*="card"], .pm-video-thumb',
-            );
-            cards.forEach((card) => {
-              let validAnchor =
-                card.tagName === "A"
-                  ? card
-                  : card.querySelector('a:not([href*="#"])') ||
-                    card.querySelector("a");
-              let href = validAnchor?.href;
-              if (!href || !href.startsWith("http")) return;
-
-              let posterUrl = "";
-              const imgEl =
-                card.tagName === "IMG" ? card : card.querySelector("img");
-              if (imgEl) {
-                posterUrl =
-                  imgEl.getAttribute("data-src") ||
-                  imgEl.getAttribute("data-lazy-src") ||
-                  imgEl.getAttribute("data-echo") ||
-                  imgEl.getAttribute("data-lazy-style") ||
-                  imgEl.src;
-              }
-
-              if (!posterUrl || posterUrl.includes("melody-lzld")) {
-                const bgSpan = card.querySelector(
-                  '[data-lazy-style], [style*="background-image"]',
-                );
-                if (bgSpan) {
-                  const styleStr =
-                    bgSpan.getAttribute("data-lazy-style") ||
-                    bgSpan.getAttribute("style");
-                  const match = styleStr.match(/url\(['"]?(.*?)['"]?\)/);
-                  if (match && match[1]) posterUrl = match[1];
-                }
-              }
-
-              if (!posterUrl || posterUrl.includes("melody-lzld")) {
-                const allLazy = card.querySelectorAll(
-                  "[data-lazy-src], [data-src], [data-echo]",
-                );
-                for (let el of allLazy) {
-                  const src =
-                    el.getAttribute("data-lazy-src") ||
-                    el.getAttribute("data-src") ||
-                    el.getAttribute("data-echo");
-                  if (src && !src.includes("melody-lzld")) {
-                    posterUrl = src;
-                    break;
-                  }
-                }
-              }
-
-              if (posterUrl && posterUrl.includes("melody-lzld")) {
-                posterUrl =
-                  "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
-              }
-
-              if (
-                !posterUrl ||
-                posterUrl.includes("logo") ||
-                posterUrl.includes("blank") ||
-                posterUrl.includes("cover.jpg")
-              )
-                return;
-
-              const titleEl =
-                card.querySelector("h3") || card.querySelector(".title");
-              const titleText = titleEl
-                ? titleEl.innerText.trim()
-                : (imgEl?.getAttribute("alt") || "").trim();
-
-              if (titleText && titleText.length > 2) {
-                if (!items.some((i) => i.link === href)) {
-                  items.push({
-                    title: titleText,
-                    poster: posterUrl,
-                    link: href,
-                  });
-                }
-              }
-            });
-            return items;
-          });
-
-          console.log(
-            `🔍 [Search API] Extracted ${extracted.length} raw results from ${task.source}`,
-          );
-          extracted.forEach((item) => {
-            let cleanTitle = item.title
-              .replace(/مشاهدة/g, "")
-              .replace(/فيلم/g, "")
-              .replace(/مسلسل/g, "")
-              .replace(/مترجم/g, "")
-              .replace(/اون لاين/g, "")
-              .trim();
-            let targetLink = item.link;
-            if (
-              targetLink.includes("mycima") &&
-              targetLink.includes("watch.php")
-            ) {
-              targetLink = targetLink.replace("watch.php", "play.php");
-            }
-            if (!results.some((r) => r.targetUrl === targetLink)) {
-              results.push({
-                id: `${task.key}-${Math.random().toString(36).substr(2, 5)}`,
-                title: cleanTitle,
-                poster: item.poster,
-                targetUrl: targetLink,
-              });
-            }
-          });
-        } catch (err) {
-          console.error(
-            `❌ [Search API] Search error on ${task.source}:`,
-            err.message,
-          );
-        } finally {
-          if (page) {
-            try {
-              console.log(
-                `🔍 [Search API] Closing page for source: ${task.source}`,
-              );
-              await page.close();
-            } catch (e) {
-              console.error("Error closing search task page:", e.message);
-            }
-          }
+  // Layer 1: In-memory
+  const localResults = [];
+  const allCats = ["englishMovies", "arabicMovies", "englishSeries", "arabicSeries"];
+  for (const cat of allCats) {
+    if (scrapedData[cat] && scrapedData[cat].length > 0) {
+      for (const item of scrapedData[cat]) {
+        if (item.title && item.title.toLowerCase().includes(q)) {
+          if (!localResults.some((r) => r.targetUrl === item.targetUrl))
+            localResults.push({ ...item, _source: "memory" });
         }
-      }),
-    );
-
-    res.json(results);
-  } catch (err) {
-    console.error("Search API Error:", err);
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Internal Search Error: " + err.message });
-    }
-  } finally {
-    if (browser) {
-      try {
-        console.log("🔍 [Search API] Closing browser...");
-        await browser.close();
-        console.log("🔍 [Search API] Browser closed successfully.");
-      } catch (e) {
-        console.error("Error closing search browser:", e.message);
       }
     }
   }
-});
+  if (localResults.length > 0) {
+    console.log("[Search API] Layer1:", localResults.length, "from memory");
+    return res.json(localResults);
+  }
+
+  // Layer 2: MongoDB
+  if (mongoose.connection.readyState === 1) {
+    try {
+      const dbItems = await Media.find({ title: { $regex: q, $options: "i" } }).limit(50);
+      if (dbItems && dbItems.length > 0) {
+        console.log("[Search API] Layer2:", dbItems.length, "from MongoDB");
+        return res.json(dbItems.map((item) => ({
+          id: item._id.toString(), title: item.title,
+          poster: item.poster, targetUrl: item.url, _source: "db",
+        })));
+      }
+    } catch (dbErr) { console.error("[Search API] DB error:", dbErr.message); }
+  }
+
+  // Layer 3: Puppeteer
+  console.log("[Search API] Layer3: Puppeteer...");
+  let browser;
+  try {
+    browser = await launchBrowser();
+    const results = [];
+    const tasks = [
+      { url: "https://web.topcinemaa.com/search/?query=" + encodeURIComponent(query) + "&type=all", source: "topcinema", key: "englishMovies" },
+      { url: "https://vid.mycima.cc/search.php?keywords=" + encodeURIComponent(query) + "&video-id=", source: "mycima", key: "arabicMovies" },
+    ];
+    await Promise.all(tasks.map(async (task) => {
+      let page;
+      try {
+        page = await browser.newPage();
+        await configurePage(page);
+        try {
+          await page.goto(task.url, { waitUntil: "domcontentloaded", timeout: 60000 });
+          console.log("[Search] Loaded", task.source, await page.title());
+        } catch (e) { console.log("[Search] Timeout:", task.source); }
+        await new Promise(r => setTimeout(r, 2000));
+        await page.evaluate(async () => {
+          for (let i = 0; i < 3; i++) { window.scrollBy(0, 600); await new Promise(r => setTimeout(r, 400)); }
+        });
+        const extracted = await page.evaluate(() => {
+          const items = [];
+          document.querySelectorAll('.Small--Box, .pm-video-thumb, [class*="movie"], [class*="card"], article').forEach((card) => {
+            const a = card.tagName === "A" ? card : card.querySelector("a");
+            const href = a && a.href;
+            if (!href || !href.startsWith("http")) return;
+            const img = card.querySelector("img");
+            let poster = img && (img.getAttribute("data-src") || img.getAttribute("data-lazy-src") || img.getAttribute("data-echo") || img.src);
+            if (!poster || poster.includes("logo") || poster.includes("blank")) {
+              const bg = card.querySelector('[style*="background-image"]');
+              if (bg) { const m = (bg.getAttribute("style")||"").match(/url(['"]?(.*?)['"]?)/); if (m&&m[1]) poster=m[1]; }
+            }
+            if (!poster) return;
+            const titleEl = card.querySelector("h3") || card.querySelector(".title");
+            const title = titleEl ? titleEl.innerText.trim() : (img && img.alt ? img.alt.trim() : "");
+            if (title && title.length > 2 && !items.some(i => i.link === href))
+              items.push({ title, poster, link: href });
+          });
+          return items;
+        });
+        console.log("[Search] Extracted", extracted.length, "from", task.source);
+        extracted.forEach((item) => {
+          const cleanTitle = item.title.replace(/مشاهدة|فيلم|مسلسل|مترجم|اون لاين/g, "").trim();
+          const targetLink = item.link.includes("mycima") ? item.link.replace("watch.php","play.php") : item.link;
+          if (!results.some(r => r.targetUrl === targetLink))
+            results.push({ id: task.key+"-"+Math.random().toString(36).substr(2,5), title: cleanTitle, poster: item.poster, targetUrl: targetLink });
+        });
+      } catch (err) { console.error("[Search] Error:", task.source, err.message); }
+      finally { if (page) { try { await page.close(); } catch(e){} } }
+    }));
+    res.json(results);
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: "Search failed: " + err.message });
+  } finally {
+    if (browser) { try { await browser.close(); } catch(e){} }
+  }
+})
 
 // Endpoint للأفلام
 app.get("/api/movies", (req, res) => res.json(scrapedMovies));
