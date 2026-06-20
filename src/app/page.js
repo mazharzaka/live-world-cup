@@ -113,7 +113,7 @@ function MatchCard({ match, isActive, onWatch }) {
 // ─── Helper: Dynamic API Base URL ──────────────────────────────────────────────
 const getApiBaseUrl = () => {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  if (typeof window === 'undefined') return 'https://live-world-cup.onrender.com';
+  if (typeof window === 'undefined') return 'http://https://live-world-cup.onrender.com';
   const hostname = window.location.hostname;
   if (hostname.includes('devtunnels.ms')) {
     return `https://${hostname.replace('-3000', '-3001')}`;
