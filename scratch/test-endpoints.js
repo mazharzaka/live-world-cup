@@ -4,7 +4,7 @@ async function testEndpoints() {
 
   console.log("Querying server endpoints...");
   try {
-    const arabicRes = await fetch("https://live-world-cup.onrender.com/api/movies/arabic");
+    const arabicRes = await fetch("http://localhost:3001/api/movies/arabic");
     const arabicData = await arabicRes.json();
     console.log(`✅ /api/movies/arabic returned ${arabicData.length} movies.`);
     if (arabicData.length > 0) {
@@ -13,9 +13,11 @@ async function testEndpoints() {
       console.error("❌ No Arabic movies returned!");
     }
 
-    const englishRes = await fetch("https://live-world-cup.onrender.com/api/movies/english");
+    const englishRes = await fetch("http://localhost:3001/api/movies/english");
     const englishData = await englishRes.json();
-    console.log(`✅ /api/movies/english returned ${englishData.length} movies.`);
+    console.log(
+      `✅ /api/movies/english returned ${englishData.length} movies.`,
+    );
     if (englishData.length > 0) {
       console.log("Sample English Movie:", englishData[0]);
     } else {

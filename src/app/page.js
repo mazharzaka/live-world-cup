@@ -120,7 +120,7 @@ function MatchCard({ match, isActive, onWatch }) {
 
 // ─── Helper: Dynamic API Base URL ──────────────────────────────────────────────
 const getApiBaseUrl = () => {
-  return process.env.NEXT_PUBLIC_API_URL || "https://live-world-cup.onrender.com";
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 };
 // ─── Helper: Get Servers List ──────────────────────────────────────────────────
 const getServers = (match) => {

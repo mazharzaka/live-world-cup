@@ -59,7 +59,9 @@ function DirectVideoPlayer({ src }) {
 function WatchContent() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
-  const title = searchParams.get("title") || (id && id.startsWith("arabic") ? "فيلم عربي" : "فيلم أجنبي");
+  const title =
+    searchParams.get("title") ||
+    (id && id.startsWith("arabic") ? "فيلم عربي" : "فيلم أجنبي");
 
   const [streamUrl, setStreamUrl] = useState("");
   const [streamType, setStreamType] = useState("iframe");
@@ -71,15 +73,15 @@ function WatchContent() {
   // تحديد الـ API المناسب للبحث عن الفيلم بناءً على الـ ID
   let listApiUrl = "";
   if (id && id.startsWith("englishMovies")) {
-    listApiUrl = "https://live-world-cup.onrender.com/api/movies/english";
+    listApiUrl = "http://localhost:3001/api/movies/english";
   } else if (id && id.startsWith("arabicMovies")) {
-    listApiUrl = "https://live-world-cup.onrender.com/api/movies/arabic";
+    listApiUrl = "http://localhost:3001/api/movies/arabic";
   } else if (id && id.startsWith("englishSeries")) {
-    listApiUrl = "https://live-world-cup.onrender.com/api/series/english";
+    listApiUrl = "http://localhost:3001/api/series/english";
   } else if (id && id.startsWith("arabicSeries")) {
-    listApiUrl = "https://live-world-cup.onrender.com/api/series/arabic";
+    listApiUrl = "http://localhost:3001/api/series/arabic";
   } else {
-    listApiUrl = "https://live-world-cup.onrender.com/api/movies/english";
+    listApiUrl = "http://localhost:3001/api/movies/english";
   }
 
   const fetchStreamUrl = async () => {
@@ -120,7 +122,7 @@ function WatchContent() {
       console.log("Found movie:", url + "/watch");
 
       // 2. جلب سيرفر البث المباشر النظيف باستخدام الـ targetUrl الأصلي
-      const apiUrl = `https://live-world-cup.onrender.com/api/media/stream?targetUrl=${encodeURIComponent(url)}`;
+      const apiUrl = `http://localhost:3001/api/media/stream?targetUrl=${encodeURIComponent(url)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error("فشل جلب سيرفر البث من الخادم.");
@@ -152,7 +154,12 @@ function WatchContent() {
   return (
     <div className="watch-container">
       {/* زر العودة */}
-      <Link href={id && id.startsWith("arabicMovies") ? "/movies/arabic" : "/movies"} className="back-btn">
+      <Link
+        href={
+          id && id.startsWith("arabicMovies") ? "/movies/arabic" : "/movies"
+        }
+        className="back-btn"
+      >
         <ArrowRight size={18} />
         <span>العودة لصفحة الأفلام</span>
       </Link>
@@ -219,9 +226,12 @@ function WatchContent() {
         )}
 
         {/* مشغل الفيديو المباشر HLS/MP4 */}
-        {!isLoading && !error && streamUrl && (streamType === "direct" || streamType === "hls") && (
-          <DirectVideoPlayer src={streamUrl} />
-        )}
+        {!isLoading &&
+          !error &&
+          streamUrl &&
+          (streamType === "direct" || streamType === "hls") && (
+            <DirectVideoPlayer src={streamUrl} />
+          )}
       </div>
 
       {/* عنوان الفيلم وتفاصيل إضافية */}
