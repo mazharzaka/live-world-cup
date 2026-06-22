@@ -39,7 +39,7 @@ function SearchResults() {
     setError(null);
     try {
       const response = await fetch(
-        `http://localhost:3001/api/search?q=${encodeURIComponent(query)}`,
+        `https://live-world-cup.onrender.com/api/search?q=${encodeURIComponent(query)}`,
       );
       if (!response.ok) {
         throw new Error("فشل جلب البيانات من الخادم");

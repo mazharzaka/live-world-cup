@@ -1,9 +1,9 @@
 async function verify() {
   console.log(
-    "Fetching new schedule from http://localhost:3001/api/schedule...",
+    "Fetching new schedule from https://live-world-cup.onrender.com/api/schedule...",
   );
   try {
-    const res = await fetch("http://localhost:3001/api/schedule");
+    const res = await fetch("https://live-world-cup.onrender.com/api/schedule");
     const matches = await res.json();
     console.log(`Successfully fetched ${matches.length} matches.`);
 

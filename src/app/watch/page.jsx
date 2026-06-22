@@ -73,15 +73,15 @@ function WatchContent() {
   // تحديد الـ API المناسب للبحث عن الفيلم بناءً على الـ ID
   let listApiUrl = "";
   if (id && id.startsWith("englishMovies")) {
-    listApiUrl = "http://localhost:3001/api/movies/english";
+    listApiUrl = "https://live-world-cup.onrender.com/api/movies/english";
   } else if (id && id.startsWith("arabicMovies")) {
-    listApiUrl = "http://localhost:3001/api/movies/arabic";
+    listApiUrl = "https://live-world-cup.onrender.com/api/movies/arabic";
   } else if (id && id.startsWith("englishSeries")) {
-    listApiUrl = "http://localhost:3001/api/series/english";
+    listApiUrl = "https://live-world-cup.onrender.com/api/series/english";
   } else if (id && id.startsWith("arabicSeries")) {
-    listApiUrl = "http://localhost:3001/api/series/arabic";
+    listApiUrl = "https://live-world-cup.onrender.com/api/series/arabic";
   } else {
-    listApiUrl = "http://localhost:3001/api/movies/english";
+    listApiUrl = "https://live-world-cup.onrender.com/api/movies/english";
   }
 
   const fetchStreamUrl = async () => {
@@ -122,7 +122,7 @@ function WatchContent() {
       console.log("Found movie:", url + "/watch");
 
       // 2. جلب سيرفر البث المباشر النظيف باستخدام الـ targetUrl الأصلي
-      const apiUrl = `http://localhost:3001/api/media/stream?targetUrl=${encodeURIComponent(url)}`;
+      const apiUrl = `https://live-world-cup.onrender.com/api/media/stream?targetUrl=${encodeURIComponent(url)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error("فشل جلب سيرفر البث من الخادم.");
