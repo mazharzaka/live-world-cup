@@ -59,7 +59,9 @@ function DirectVideoPlayer({ src }) {
 function WatchContent() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
-  const title = searchParams.get("title") || (id && id.startsWith("arabic") ? "فيلم عربي" : "فيلم أجنبي");
+  const title =
+    searchParams.get("title") ||
+    (id && id.startsWith("arabic") ? "فيلم عربي" : "فيلم أجنبي");
 
   const [streamUrl, setStreamUrl] = useState("");
   const [streamType, setStreamType] = useState("iframe");
@@ -152,7 +154,12 @@ function WatchContent() {
   return (
     <div className="watch-container">
       {/* زر العودة */}
-      <Link href={id && id.startsWith("arabicMovies") ? "/movies/arabic" : "/movies"} className="back-btn">
+      <Link
+        href={
+          id && id.startsWith("arabicMovies") ? "/movies/arabic" : "/movies"
+        }
+        className="back-btn"
+      >
         <ArrowRight size={18} />
         <span>العودة لصفحة الأفلام</span>
       </Link>
@@ -219,9 +226,12 @@ function WatchContent() {
         )}
 
         {/* مشغل الفيديو المباشر HLS/MP4 */}
-        {!isLoading && !error && streamUrl && (streamType === "direct" || streamType === "hls") && (
-          <DirectVideoPlayer src={streamUrl} />
-        )}
+        {!isLoading &&
+          !error &&
+          streamUrl &&
+          (streamType === "direct" || streamType === "hls") && (
+            <DirectVideoPlayer src={streamUrl} />
+          )}
       </div>
 
       {/* عنوان الفيلم وتفاصيل إضافية */}

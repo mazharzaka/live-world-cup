@@ -139,8 +139,8 @@ const MOVIE_TARGETS = [
 async function launchBrowser() {
   const args = [
     // ── Security (required for containerized / sandbox-free envs) ──
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
 
     // ── RAM & CPU savings ──
     '--disable-dev-shm-usage',        // use /tmp instead of /dev/shm (critical on Render)
@@ -161,11 +161,11 @@ async function launchBrowser() {
     '--mute-audio',
 
     // ── Network / SSL ──
-    '--ignore-certificate-errors',
-    '--ignore-ssl-errors=yes',
+    "--ignore-certificate-errors",
+    "--ignore-ssl-errors=yes",
 
     // ── Media: disable images globally at blink level ──
-    '--blink-settings=imagesEnabled=false',
+    "--blink-settings=imagesEnabled=false",
   ];
 
   const proxyServer = process.env.PROXY_SERVER; // e.g. http://p.webshare.io:80
@@ -189,17 +189,19 @@ async function configurePage(page) {
 
   // Full real-browser User-Agent (matches Chrome 126 on Windows)
   await page.setUserAgent(
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
   );
 
   // Cloudflare-bypass extra headers — makes the request look like a real browser
   await page.setExtraHTTPHeaders({
-    'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    'sec-ch-ua': '"Chromium";v="126", "Google Chrome";v="126", "Not-A.Brand";v="99"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Windows"',
-    'Upgrade-Insecure-Requests': '1',
+    "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
+    Accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "sec-ch-ua":
+      '"Chromium";v="126", "Google Chrome";v="126", "Not-A.Brand";v="99"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "Upgrade-Insecure-Requests": "1",
   });
 
   // Proxy authentication (if configured)
@@ -217,10 +219,20 @@ async function configurePage(page) {
 // Use this for SCRAPER pages only — NOT for the sniffer (which needs to intercept)
 async function blockPageResources(page) {
   await page.setRequestInterception(true);
-  page.on('request', (req) => {
+  page.on("request", (req) => {
     const type = req.resourceType();
     // Block everything that isn't needed for DOM extraction
-    if (['image', 'stylesheet', 'font', 'media', 'ping', 'manifest', 'other'].includes(type)) {
+    if (
+      [
+        "image",
+        "stylesheet",
+        "font",
+        "media",
+        "ping",
+        "manifest",
+        "other",
+      ].includes(type)
+    ) {
       req.abort().catch(() => {});
     } else {
       req.continue().catch(() => {});
@@ -305,7 +317,9 @@ async function movieSniffer() {
         await page.setViewport({ width: 1366, height: 768 });
         await configurePage(page);
         await blockPageResources(page); // 💾 Block images/CSS/fonts to save RAM
-        console.log(`🚀 [Ultimate Scraper] Page configured + resources blocked for: ${task.source}`);
+        console.log(
+          `🚀 [Ultimate Scraper] Page configured + resources blocked for: ${task.source}`,
+        );
 
         // 👑 المسار الأول: توب سينما للأجنبي بالمنيو الديناميكي (شغال الله ينور)
         if (task.type === "direct_menu_site") {
@@ -1909,7 +1923,8 @@ app.get("/api/media/stream", async (req, res) => {
   try {
     // 1. Check MongoDB first (Cache-First)
     const cached = await Media.findOne({ url: targetUrl });
-    if (cached && cached.streamUrl) {
+    console.log("cached", cached);
+    if (cached && req.query.targetUrl) {
       console.log(
         `⚡ [Cache Hit - DB] Found stream in database for: ${targetUrl}`,
       );

@@ -1,11 +1,14 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
 export const streamApi = createApi({
-  reducerPath: 'streamApi',
-  baseQuery: fetchBaseQuery({ baseUrl: process.env.NEXT_PUBLIC_API_URL || 'https://live-world-cup.onrender.com' }),
+  reducerPath: "streamApi",
+  baseQuery: fetchBaseQuery({
+    baseUrl:
+      process.env.NEXT_PUBLIC_API_URL || "https://live-world-cup.onrender.com/",
+  }),
   endpoints: (builder) => ({
     getSchedule: builder.query({
-      query: () => '/api/schedule',
+      query: () => "/api/schedule",
     }),
   }),
 });
