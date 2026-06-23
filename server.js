@@ -877,16 +877,13 @@ app.get("/api/search", async (req, res) => {
 
   console.log(`📡 [Search API] Active domains to query:`, activeDomains);
 
-  let browser;
-  try {
-    browser = await launchBrowser();
-    const results = [];
-    const tasks = [
-      {
-        url: `${activeDomains.topcinema}/search/?query=${encodeURIComponent(query)}&type=all`,
-        source: "topcinema",
-        key: "englishMovies"
-      },
+  // Language Detection: Only scrape relevant sources to save RAM and time
+  const isArabic = /[\u0600-\u06FF]/.test(q);
+  const tasks = [];
+  
+  if (isArabic) {
+    console.log(`🇸🇦 [Search API] Arabic query detected — skipping TopCinema`);
+    tasks.push(
       {
         url: `${activeDomains.arabseed}/?s=${encodeURIComponent(query)}`,
         source: "arabseed",
@@ -897,110 +894,140 @@ app.get("/api/search", async (req, res) => {
         source: "mycima",
         key: "arabicMovies"
       }
-    ];
-
-    await Promise.all(
-      tasks.map(async (task) => {
-        let page;
-        try {
-          page = await browser.newPage();
-          await configurePage(page);
-          await blockPageResources(page);
-
-          try {
-            await page.goto(task.url, { waitUntil: "domcontentloaded", timeout: 60000 });
-            console.log(`🔍 [Search API] Loaded ${task.source}: "${await page.title()}"`);
-          } catch (e) {
-            console.log(`⚠️ [Search API] ${task.source} timeout — trying extraction anyway: ${e.message}`);
-          }
-
-          await new Promise((r) => setTimeout(r, 2000));
-          await page.evaluate(async () => {
-            for (let i = 0; i < 3; i++) {
-              window.scrollBy(0, 600);
-              await new Promise((r) => setTimeout(r, 400));
-            }
-          });
-
-          const extracted = await page.evaluate(() => {
-            const items = [];
-            const cards = document.querySelectorAll(
-              '.Small--Box, .pm-video-thumb, .pm-li-video, .thumbnail, [class*="movie"], [class*="card"], article'
-            );
-            cards.forEach((card) => {
-              let validAnchor = null;
-              if (card.tagName === "A") {
-                validAnchor = card;
-              } else {
-                const anchors = Array.from(card.querySelectorAll('a'));
-                validAnchor = anchors.find(a => {
-                  const href = a.getAttribute('href') || '';
-                  return href && !href.startsWith('#') && !href.includes('javascript:') && !href.includes('modal-login-form');
-                }) || anchors[0];
-              }
-
-              const href = validAnchor?.href;
-              if (!href || !href.startsWith("http")) return;
-
-              let posterUrl = "";
-              const imgEl = card.querySelector("img");
-              if (imgEl) {
-                posterUrl =
-                  imgEl.getAttribute("data-src") ||
-                  imgEl.getAttribute("data-lazy-src") ||
-                  imgEl.getAttribute("data-echo") ||
-                  imgEl.src;
-              }
-              if (!posterUrl || posterUrl.includes("melody-lzld")) {
-                const bgSpan = card.querySelector('[data-lazy-style], [style*="background-image"]');
-                if (bgSpan) {
-                  const styleStr = bgSpan.getAttribute("data-lazy-style") || bgSpan.getAttribute("style");
-                  const match = styleStr?.match(/url\(['"]?(.*?)['"]?\)/);
-                  if (match?.[1]) posterUrl = match[1];
-                }
-              }
-              if (posterUrl && posterUrl.includes("melody-lzld"))
-                posterUrl = "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
-              if (!posterUrl || posterUrl.includes("logo") || posterUrl.includes("blank")) return;
-
-              const titleEl = card.querySelector("h3") || card.querySelector(".title") || card.querySelector(".ellipsis") || card.querySelector(".pm-title-link");
-              const title = titleEl ? titleEl.innerText.trim() : (imgEl && imgEl.alt ? imgEl.alt.trim() : "");
-
-              if (title && title.length > 2) {
-                if (!items.some((i) => i.link === href)) {
-                  items.push({ title, poster: posterUrl, link: href });
-                }
-              }
-            });
-            return items;
-          });
-
-          console.log(`🔍 [Search API] Extracted ${extracted.length} from ${task.source}`);
-          extracted.forEach((item) => {
-            let cleanTitle = item.title
-              .replace(/مشاهدة|فيلم|مسلسل|مترجم|اون لاين/g, "")
-              .trim();
-            let targetLink = item.link;
-            if (targetLink.includes("mycima") && targetLink.includes("watch.php")) {
-              targetLink = targetLink.replace("watch.php", "play.php");
-            }
-            if (!results.some((r) => r.targetUrl === targetLink)) {
-              results.push({
-                id: `${task.key}-${Math.random().toString(36).substr(2, 5)}`,
-                title: cleanTitle,
-                poster: item.poster,
-                targetUrl: targetLink,
-                _source: "puppeteer",
-              });
-            }
-          });
-        } catch (err) {
-          console.error(`❌ [Search API] Error on ${task.source}:`, err.message);
-        } finally {
-          if (page) { try { await page.close(); } catch (e) {} }
-        }
-      })
     );
+  } else {
+    console.log(`🇬🇧 [Search API] English query detected — skipping Arabic platforms`);
+    tasks.push({
+      url: `${activeDomains.topcinema}/search/?query=${encodeURIComponent(query)}&type=all`,
+      source: "topcinema",
+      key: "englishMovies"
+    });
+  }
+
+  let browser;
+  try {
+    browser = await launchBrowser();
+    const results = [];
+
+    // Run scraping tasks SEQUENTIALLY to stay strictly under Render's 512MB memory limit
+    for (const task of tasks) {
+      let page;
+      try {
+        console.log(`🚀 [Search API] Starting scraping task: ${task.source}`);
+        page = await browser.newPage();
+        await configurePage(page);
+        await blockPageResources(page);
+
+        try {
+          await page.goto(task.url, { waitUntil: "domcontentloaded", timeout: 60000 });
+          console.log(`🔍 [Search API] Loaded ${task.source}: "${await page.title()}"`);
+        } catch (e) {
+          console.log(`⚠️ [Search API] ${task.source} timeout — trying extraction anyway: ${e.message}`);
+        }
+
+        await new Promise((r) => setTimeout(r, 2000));
+        await page.evaluate(async () => {
+          for (let i = 0; i < 3; i++) {
+            window.scrollBy(0, 600);
+            await new Promise((r) => setTimeout(r, 400));
+          }
+        });
+
+        const extracted = await page.evaluate(() => {
+          const items = [];
+          const cards = document.querySelectorAll(
+            '.Small--Box, .pm-video-thumb, .pm-li-video, .thumbnail, [class*="movie"], [class*="card"], article'
+          );
+          cards.forEach((card) => {
+            let validAnchor = null;
+            if (card.tagName === "A") {
+              validAnchor = card;
+            } else {
+              const anchors = Array.from(card.querySelectorAll('a'));
+              validAnchor = anchors.find(a => {
+                const href = a.getAttribute('href') || '';
+                return href && !href.startsWith('#') && !href.includes('javascript:') && !href.includes('modal-login-form');
+              }) || anchors[0];
+            }
+
+            const href = validAnchor?.href;
+            if (!href || !href.startsWith("http")) return;
+
+            let posterUrl = "";
+            const imgEl = card.querySelector("img");
+            if (imgEl) {
+              posterUrl =
+                imgEl.getAttribute("data-src") ||
+                imgEl.getAttribute("data-lazy-src") ||
+                imgEl.getAttribute("data-echo") ||
+                imgEl.src;
+            }
+            if (!posterUrl || posterUrl.includes("melody-lzld")) {
+              const bgSpan = card.querySelector('[data-lazy-style], [style*="background-image"]');
+              if (bgSpan) {
+                const styleStr = bgSpan.getAttribute("data-lazy-style") || bgSpan.getAttribute("style");
+                const match = styleStr?.match(/url\(['"]?(.*?)['"]?\)/);
+                if (match?.[1]) posterUrl = match[1];
+              }
+            }
+            if (posterUrl && posterUrl.includes("melody-lzld"))
+              posterUrl = "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
+            if (!posterUrl || posterUrl.includes("logo") || posterUrl.includes("blank")) return;
+
+            const titleEl = card.querySelector("h3") || card.querySelector(".title") || card.querySelector(".ellipsis") || card.querySelector(".pm-title-link");
+            const title = titleEl ? titleEl.innerText.trim() : (imgEl && imgEl.alt ? imgEl.alt.trim() : "");
+
+            if (title && title.length > 2) {
+              if (!items.some((i) => i.link === href)) {
+                items.push({ title, poster: posterUrl, link: href });
+              }
+            }
+          });
+          return items;
+        });
+
+        console.log(`🔍 [Search API] Extracted ${extracted.length} from ${task.source}`);
+        extracted.forEach((item) => {
+          let cleanTitle = item.title
+            .replace(/مشاهدة|فيلم|مسلسل|مترجم|اون لاين/g, "")
+            .trim();
+          let targetLink = item.link;
+          if (targetLink.includes("mycima") && targetLink.includes("watch.php")) {
+            targetLink = targetLink.replace("watch.php", "play.php");
+          }
+          if (!results.some((r) => r.targetUrl === targetLink)) {
+            const newItem = {
+              id: `${task.key}-${Math.random().toString(36).substr(2, 5)}`,
+              title: cleanTitle,
+              poster: item.poster,
+              targetUrl: targetLink,
+              _source: "puppeteer",
+            };
+            results.push(newItem);
+
+            // Save/cache to MongoDB in the background to avoid Puppeteer runs next time!
+            if (mongoose.connection.readyState === 1) {
+              Media.findOneAndUpdate(
+                { url: targetLink },
+                {
+                  title: cleanTitle,
+                  url: targetLink,
+                  poster: item.poster,
+                  category: task.key,
+                  fetchedAt: new Date(),
+                },
+                { upsert: true, new: true }
+              ).catch((err) => console.error("❌ [Search API] DB Cache error:", err.message));
+            }
+          }
+        });
+      } catch (err) {
+        console.error(`❌ [Search API] Error on ${task.source}:`, err.message);
+      } finally {
+        if (page) { try { await page.close(); } catch (e) {} }
+      }
+    }
+
     res.json(results);
   } catch (err) {
     console.error("Search API Error:", err);
@@ -1892,6 +1919,31 @@ app.get("/api/stream", async (req, res) => {
   if (!targetUrl) return res.status(400).send("الرابط مطلوب");
 
   targetUrl = cleanMovieUrl(targetUrl);
+  
+  if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+    console.log(`⚠️ [Stream API] URL is invalid. Searching DB for query: "${targetUrl}"`);
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const match = await Media.findOne({
+          $or: [
+            { title: { $regex: targetUrl, $options: "i" } },
+            { url: { $regex: targetUrl, $options: "i" } }
+          ]
+        }).sort({ fetchedAt: -1 });
+        if (match) {
+          console.log(`🎯 [Stream API] Found matching URL for stream: ${match.url}`);
+          targetUrl = match.url;
+        } else {
+          return res.status(400).send("الرابط غير صالح ولم يتم العثور على فيلم مطابق");
+        }
+      } catch (e) {
+        return res.status(400).send("الرابط غير صالح");
+      }
+    } else {
+      return res.status(400).send("الرابط غير صالح");
+    }
+  }
+
   console.log(`📡 [Direct Stream] طلب تشغيل البث لـ: ${targetUrl}`);
 
   if (targetUrl.includes(".m3u8")) {
@@ -1918,6 +1970,31 @@ app.get("/api/media/stream", async (req, res) => {
   if (!targetUrl) return res.status(400).json({ error: "الرابط مطلوب" });
 
   targetUrl = cleanMovieUrl(targetUrl);
+
+  if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+    console.log(`⚠️ [Media Stream API] URL is invalid. Searching DB for query: "${targetUrl}"`);
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const match = await Media.findOne({
+          $or: [
+            { title: { $regex: targetUrl, $options: "i" } },
+            { url: { $regex: targetUrl, $options: "i" } }
+          ]
+        }).sort({ fetchedAt: -1 });
+        if (match) {
+          console.log(`🎯 [Media Stream API] Found matching URL for movie: ${match.url}`);
+          targetUrl = match.url;
+        } else {
+          return res.status(400).json({ error: "الرابط غير صالح ولم يتم العثور على نتائج بحث مطابقة له" });
+        }
+      } catch (e) {
+        return res.status(400).json({ error: "الرابط غير صالح" });
+      }
+    } else {
+      return res.status(400).json({ error: "الرابط غير صالح" });
+    }
+  }
+
   console.log(`🎬 [Media Stream API] Cache-First request for: ${targetUrl}`);
 
   try {
@@ -1936,6 +2013,7 @@ app.get("/api/media/stream", async (req, res) => {
     );
     // 2. Fallback to Puppeteer if not in DB or streamUrl is missing
     const result = await getOrSniffStream(targetUrl);
+
     if (result && result.streamUrl) {
       // Save/update to MongoDB in the background
       Media.findOneAndUpdate(
