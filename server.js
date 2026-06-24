@@ -796,6 +796,107 @@ app.get("/api/series/english", async (req, res) => {
   res.json(scrapedData.englishSeries);
 });
 
+// ─── Fast HTTP Fetch Search Parser ───
+function parseSearchHTML(html, taskKey) {
+  const items = [];
+  // Match div/article/a with classes like Small--Box, pm-video-thumb, card, movie, content
+  const cardRegex = /<(div|a|article)[^>]+class="[^"]*(Small--Box|pm-video-thumb|pm-li-video|thumbnail|movie|card|content)[^"]*"[^>]*>([\s\S]*?)<\/\1>/gi;
+  let match;
+  
+  while ((match = cardRegex.exec(html)) !== null) {
+    const cardContent = match[3];
+    
+    // 1. Extract href
+    const hrefMatch = cardContent.match(/href=["'](https?:\/\/[^"']+)["']/i) || match[0].match(/href=["'](https?:\/\/[^"']+)["']/i);
+    if (!hrefMatch) continue;
+    const href = hrefMatch[1];
+    if (href.includes("/category/") || href.includes("/actor/") || href.includes("/genre/") || href.includes("/year/") || href.includes("/tag/")) continue;
+    
+    // 2. Extract poster
+    let poster = "";
+    const imgMatch = cardContent.match(/(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i);
+    if (imgMatch) {
+      poster = imgMatch[1];
+    }
+    if (!poster || poster.includes("melody-lzld") || poster.includes("logo") || poster.includes("blank")) {
+      poster = "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
+    }
+    
+    // 3. Extract title
+    let title = "";
+    const h3Match = cardContent.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+    const titleClassMatch = cardContent.match(/class="[^"]*(title|ellipsis|pm-title-link)[^"]*"[^>]*>([\s\S]*?)<\//i);
+    const altMatch = cardContent.match(/alt=["']([^"']+)["']/i);
+    
+    if (h3Match) {
+      title = h3Match[1].replace(/<[^>]*>/g, "").trim();
+    } else if (titleClassMatch) {
+      title = titleClassMatch[2].replace(/<[^>]*>/g, "").trim();
+    } else if (altMatch) {
+      title = altMatch[1].trim();
+    }
+    
+    if (title && title.length > 2) {
+      if (!items.some(i => i.link === href)) {
+        items.push({ title, poster, link: href });
+      }
+    }
+  }
+  
+  // Fallback anchor-image scanner if cardRegex did not find anything
+  if (items.length === 0) {
+    const anchorImgRegex = /<a[^>]+href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?<img[\s\S]*?>[\s\S]*?)<\/a>/gi;
+    let fallbackMatch;
+    while ((fallbackMatch = anchorImgRegex.exec(html)) !== null) {
+      const href = fallbackMatch[1];
+      const content = fallbackMatch[2];
+      if (href.includes("/category/") || href.includes("/actor/") || href.includes("/genre/")) continue;
+      
+      const imgMatch = content.match(/(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i);
+      const poster = imgMatch ? imgMatch[1] : "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
+      
+      const altMatch = content.match(/alt=["']([^"']+)["']/i);
+      const title = altMatch ? altMatch[1].trim() : "";
+      
+      if (title && title.length > 2 && !items.some(i => i.link === href)) {
+        items.push({ title, poster, link: href });
+      }
+    }
+  }
+  
+  return items;
+}
+
+async function fetchSearchHTTP(url) {
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9,ar;q=0.8"
+  };
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 seconds timeout
+  try {
+    const response = await fetch(url, {
+      headers,
+      method: "GET",
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) {
+      throw new Error(`HTTP status ${response.status}`);
+    }
+    const html = await response.text();
+    const isCF = html.includes("Cloudflare") || html.includes("Just a moment") || html.includes("Security Check");
+    if (isCF) {
+      throw new Error("Blocked by Cloudflare DDoS page");
+    }
+    return html;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
 app.get("/api/search", async (req, res) => {
   const query = req.query.q;
   if (!query) return res.status(400).json({ error: "Search query required" });
@@ -848,12 +949,7 @@ app.get("/api/search", async (req, res) => {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  // Layer 3: Puppeteer fallback (only if memory + DB are both empty)
-  // ══════════════════════════════════════════════════════════════════
-  console.log(`🔍 [Search API] No local results — falling back to Puppeteer scraping...`);
-  
-  // Dynamic domain detection from DB (highly robust fallback)
+  // Define active domains for search targets
   const activeDomains = {
     topcinema: "https://topcinemaa.cam",
     arabseed: "https://a.asd.ink",
@@ -875,14 +971,11 @@ app.get("/api/search", async (req, res) => {
     }
   }
 
-  console.log(`📡 [Search API] Active domains to query:`, activeDomains);
-
   // Language Detection: Only scrape relevant sources to save RAM and time
   const isArabic = /[\u0600-\u06FF]/.test(q);
   const tasks = [];
   
   if (isArabic) {
-    console.log(`🇸🇦 [Search API] Arabic query detected — skipping TopCinema`);
     tasks.push(
       {
         url: `${activeDomains.arabseed}/?s=${encodeURIComponent(query)}`,
@@ -896,7 +989,6 @@ app.get("/api/search", async (req, res) => {
       }
     );
   } else {
-    console.log(`🇬🇧 [Search API] English query detected — skipping Arabic platforms`);
     tasks.push({
       url: `${activeDomains.topcinema}/search/?query=${encodeURIComponent(query)}&type=all`,
       source: "topcinema",
@@ -904,6 +996,70 @@ app.get("/api/search", async (req, res) => {
     });
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // Layer 3: Fast HTTP Fetch Search (Instant — 0MB RAM)
+  // ══════════════════════════════════════════════════════════════════
+  console.log(`🔍 [Search API] Trying Fast HTTP fetch for: "${q}"...`);
+  const httpResults = [];
+  let httpSucceeded = false;
+
+  for (const task of tasks) {
+    try {
+      console.log(`📡 [Search HTTP] Fetching ${task.source} search page: ${task.url}`);
+      const html = await fetchSearchHTTP(task.url);
+      const extracted = parseSearchHTML(html, task.key);
+      console.log(`✅ [Search HTTP] Extracted ${extracted.length} movies from ${task.source}`);
+
+      extracted.forEach((item) => {
+        let cleanTitle = item.title
+          .replace(/مشاهدة|فيلم|مسلسل|مترجم|اون لاين/g, "")
+          .trim();
+        let targetLink = item.link;
+        if (targetLink.includes("mycima") && targetLink.includes("watch.php")) {
+          targetLink = targetLink.replace("watch.php", "play.php");
+        }
+        if (!httpResults.some((r) => r.targetUrl === targetLink)) {
+          const newItem = {
+            id: `${task.key}-${Math.random().toString(36).substr(2, 5)}`,
+            title: cleanTitle,
+            poster: item.poster,
+            targetUrl: targetLink,
+            _source: "http_fetch",
+          };
+          httpResults.push(newItem);
+
+          // Cache in DB in background
+          if (mongoose.connection.readyState === 1) {
+            Media.findOneAndUpdate(
+              { url: targetLink },
+              {
+                title: cleanTitle,
+                url: targetLink,
+                poster: item.poster,
+                category: task.key,
+                fetchedAt: new Date(),
+              },
+              { upsert: true, new: true }
+            ).catch((err) => console.error("❌ [Search HTTP] DB Cache error:", err.message));
+          }
+        }
+      });
+      httpSucceeded = true;
+    } catch (err) {
+      console.warn(`⚠️ [Search HTTP] Failed for ${task.source}: ${err.message}`);
+    }
+  }
+
+  if (httpSucceeded) {
+    console.log(`✅ [Search API] Return HTTP fetch results: ${httpResults.length} items`);
+    return res.json(httpResults);
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // Layer 4: Puppeteer fallback (only if memory, DB, and HTTP fetches all failed)
+  // ══════════════════════════════════════════════════════════════════
+  console.log(`🚨 [Search API] All HTTP fetches failed/blocked. Falling back to Puppeteer...`);
+  
   let browser;
   try {
     browser = await launchBrowser();
@@ -919,17 +1075,17 @@ app.get("/api/search", async (req, res) => {
         await blockPageResources(page);
 
         try {
-          await page.goto(task.url, { waitUntil: "domcontentloaded", timeout: 60000 });
+          await page.goto(task.url, { waitUntil: "domcontentloaded", timeout: 45000 });
           console.log(`🔍 [Search API] Loaded ${task.source}: "${await page.title()}"`);
         } catch (e) {
           console.log(`⚠️ [Search API] ${task.source} timeout — trying extraction anyway: ${e.message}`);
         }
 
-        await new Promise((r) => setTimeout(r, 2000));
+        await new Promise((r) => setTimeout(r, 1500));
         await page.evaluate(async () => {
           for (let i = 0; i < 3; i++) {
             window.scrollBy(0, 600);
-            await new Promise((r) => setTimeout(r, 400));
+            await new Promise((r) => setTimeout(r, 300));
           }
         });
 
@@ -1005,7 +1161,6 @@ app.get("/api/search", async (req, res) => {
             };
             results.push(newItem);
 
-            // Save/cache to MongoDB in the background to avoid Puppeteer runs next time!
             if (mongoose.connection.readyState === 1) {
               Media.findOneAndUpdate(
                 { url: targetLink },
@@ -2001,9 +2156,11 @@ app.get("/api/media/stream", async (req, res) => {
     // 1. Check MongoDB first (Cache-First)
     const cached = await Media.findOne({ url: targetUrl });
     console.log("cached", cached);
-    if (cached && req.query.targetUrl) {
+    
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    if (cached && cached.streamUrl && cached.fetchedAt && cached.fetchedAt > twoHoursAgo) {
       console.log(
-        `⚡ [Cache Hit - DB] Found stream in database for: ${targetUrl}`,
+        `⚡ [Cache Hit - DB] Found fresh stream in database for: ${targetUrl}`,
       );
       return res.json({ streamUrl: cached.streamUrl, type: cached.type });
     }
@@ -2121,71 +2278,23 @@ async function runHourlyCronJob() {
 
     for (const item of items) {
       try {
-        const existing = await Media.findOne({ url: item.targetUrl });
-        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-
-        let streamInfo = null;
-        if (
-          existing &&
-          existing.streamUrl &&
-          existing.fetchedAt > twoHoursAgo
-        ) {
-          console.log(`[Cron] Using cached stream for ${item.title}`);
-          streamInfo = {
-            streamUrl: existing.streamUrl,
-            type: existing.type,
-          };
-        } else {
-          console.log(
-            `[Cron] Sniffing stream for ${item.title} (${item.targetUrl})...`,
-          );
-          // Wait a short delay to be nice to websites
-          await new Promise((r) => setTimeout(r, 2000));
-          streamInfo = await getOrSniffStream(item.targetUrl);
-        }
-
-        if (streamInfo && streamInfo.streamUrl) {
-          await Media.findOneAndUpdate(
-            { url: item.targetUrl },
-            {
-              title: item.title,
-              url: item.targetUrl,
-              poster: item.poster,
-              streamUrl: streamInfo.streamUrl,
-              type: streamInfo.type,
-              platform: item.targetUrl.includes("topcinema")
-                ? "topcinema"
-                : item.targetUrl.includes("arabseed") ||
-                    item.targetUrl.includes("asd")
-                  ? "arabseed"
-                  : "other",
-              category: category,
-              fetchedAt: new Date(),
-            },
-            { upsert: true, new: true },
-          );
-          console.log(`✅ [Cron] Upserted stream for: ${item.title}`);
-        } else {
-          await Media.findOneAndUpdate(
-            { url: item.targetUrl },
-            {
-              title: item.title,
-              url: item.targetUrl,
-              poster: item.poster,
-              platform: item.targetUrl.includes("topcinema")
-                ? "topcinema"
-                : item.targetUrl.includes("arabseed") ||
-                    item.targetUrl.includes("asd")
-                  ? "arabseed"
-                  : "other",
-              category: category,
-            },
-            { upsert: true, new: true },
-          );
-          console.log(
-            `⚠️ [Cron] Saved metadata only (sniff failed) for: ${item.title}`,
-          );
-        }
+        await Media.findOneAndUpdate(
+          { url: item.targetUrl },
+          {
+            title: item.title,
+            url: item.targetUrl,
+            poster: item.poster,
+            platform: item.targetUrl.includes("topcinema")
+              ? "topcinema"
+              : item.targetUrl.includes("arabseed") ||
+                  item.targetUrl.includes("asd")
+                ? "arabseed"
+                : "other",
+            category: category,
+          },
+          { upsert: true, new: true },
+        );
+        console.log(`✅ [Cron] Saved metadata for: ${item.title}`);
       } catch (err) {
         console.error(
           `❌ [Cron] Error processing item ${item.title}:`,
@@ -2243,10 +2352,28 @@ async function initializeStartup() {
     loadFallback();
   }
 
-  console.log("🚀 Starting initial movie scraping and sniffing job...");
-  runHourlyCronJob().catch((err) =>
-    console.error("Error running initial cron job:", err),
-  );
+  console.log("🚀 Starting initial startup checks...");
+  let movieCount = 0;
+  if (mongoose.connection.readyState === 1) {
+    try {
+      movieCount = await Media.countDocuments({});
+      console.log(`🔌 [DB Check] Database contains ${movieCount} media items.`);
+    } catch (err) {
+      console.error("❌ [DB Check] Error counting media documents:", err.message);
+    }
+  }
+
+  if (movieCount > 0) {
+    console.log("🚀 [Startup] Skipping initial scraping job since database has seeded data.");
+  } else {
+    console.log("🚀 [Startup] Database is empty. Scheduling initial movie scraping in the background after 90 seconds...");
+    setTimeout(() => {
+      console.log("⏰ [Startup Background] Starting initial movie scraping job now...");
+      runHourlyCronJob().catch((err) =>
+        console.error("Error running background startup cron job:", err)
+      );
+    }, 90000); // 90 seconds delay
+  }
 }
 
 initializeStartup();
