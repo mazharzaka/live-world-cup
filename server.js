@@ -276,7 +276,7 @@ async function movieSniffer() {
   const browser = await launchBrowser();
   console.log("🚀 [Ultimate Scraper] Puppeteer browser launched successfully!");
 
-  scrapedData = {
+  const tempScrapedData = {
     arabicMovies: [],
     englishMovies: [],
     arabicSeries: [],
@@ -605,9 +605,9 @@ async function movieSniffer() {
                   targetLink = targetLink.replace("watch.php", "play.php");
                 }
                 if (
-                  !scrapedData[key].some((el) => el.targetUrl === targetLink)
+                  !tempScrapedData[key].some((el) => el.targetUrl === targetLink)
                 ) {
-                  scrapedData[key].push({
+                  tempScrapedData[key].push({
                     id: `${key}-${Math.random().toString(36).substr(2, 5)}`,
                     title: cleanTitle,
                     poster: item.poster,
@@ -616,7 +616,7 @@ async function movieSniffer() {
                 }
               });
               console.log(
-                `✅ [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] لقطنا ${scrapedData[key].length} عنوان في حقل [${key}]`,
+                `✅ [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] لقطنا ${tempScrapedData[key].length} عنوان في حقل [${key}]`,
               );
             }
           } catch (err) {
@@ -710,9 +710,9 @@ async function movieSniffer() {
                   .trim();
 
                 if (
-                  !scrapedData[key].some((el) => el.targetUrl === item.link)
+                  !tempScrapedData[key].some((el) => el.targetUrl === item.link)
                 ) {
-                  scrapedData[key].push({
+                  tempScrapedData[key].push({
                     id: `${key}-${Math.random().toString(36).substr(2, 5)}`,
                     title: cleanTitle,
                     poster: item.poster,
@@ -721,7 +721,7 @@ async function movieSniffer() {
                 }
               });
               console.log(
-                `✅ [جوجل عربي] لقطنا بنجاح ${scrapedData[key].length} عنوان عربي في حقل [${key}]`,
+                `✅ [جوجل عربي] لقطنا بنجاح ${tempScrapedData[key].length} عنوان عربي في حقل [${key}]`,
               );
             }
           } catch (err) {
@@ -749,6 +749,20 @@ async function movieSniffer() {
       console.log("⚠️ فشل إغلاق المتصفح (أفلام):", e.message);
     }
   }
+
+  // 🛡️ Safe check: only overwrite global cache if we successfully scraped movies
+  const totalCount = tempScrapedData.arabicMovies.length + 
+                     tempScrapedData.englishMovies.length + 
+                     tempScrapedData.arabicSeries.length + 
+                     tempScrapedData.englishSeries.length;
+                    
+  if (totalCount > 0) {
+    scrapedData = tempScrapedData;
+    console.log(`✅ [Scraper] Successfully updated scrapedData cache with ${totalCount} items.`);
+  } else {
+    console.warn("⚠️ [Scraper] Scraped 0 items. Retaining previous in-memory cache data to prevent empty UI.");
+  }
+  return totalCount;
 }
 
 async function fetchCategoryFromDB(category) {
@@ -799,42 +813,60 @@ app.get("/api/series/english", async (req, res) => {
 // ─── Fast HTTP Fetch Search Parser ───
 function parseSearchHTML(html, taskKey) {
   const items = [];
-  // Match div/article/a with classes like Small--Box, pm-video-thumb, card, movie, content
-  const cardRegex = /<(div|a|article)[^>]+class="[^"]*(Small--Box|pm-video-thumb|pm-li-video|thumbnail|movie|card|content)[^"]*"[^>]*>([\s\S]*?)<\/\1>/gi;
+  
+  // 1. Scan structural anchor tags wrapping images (extremely generic, bypasses class name changes)
+  // This matches: <a ... href="URL" ...> ... <img ... src="POSTER" ... alt="TITLE" ...> ... </a>
+  const anchorImgRegex = /<a\s+[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?<img\s+[^>]*>[\s\S]*?)<\/a>/gi;
   let match;
   
-  while ((match = cardRegex.exec(html)) !== null) {
-    const cardContent = match[3];
+  while ((match = anchorImgRegex.exec(html)) !== null) {
+    const href = match[1];
+    const innerContent = match[2];
     
-    // 1. Extract href
-    const hrefMatch = cardContent.match(/href=["'](https?:\/\/[^"']+)["']/i) || match[0].match(/href=["'](https?:\/\/[^"']+)["']/i);
-    if (!hrefMatch) continue;
-    const href = hrefMatch[1];
-    if (href.includes("/category/") || href.includes("/actor/") || href.includes("/genre/") || href.includes("/year/") || href.includes("/tag/")) continue;
+    // Ignore non-movie links
+    if (
+      href.includes("/category/") || 
+      href.includes("/actor/") || 
+      href.includes("/genre/") || 
+      href.includes("/year/") || 
+      href.includes("/tag/") ||
+      href.includes("/tags/") ||
+      href.includes("javascript:") ||
+      href.includes("#")
+    ) {
+      continue;
+    }
     
-    // 2. Extract poster
+    // Extract poster from img tag
     let poster = "";
-    const imgMatch = cardContent.match(/(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i);
+    const imgMatch = innerContent.match(/<img\s+[^>]*(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i);
     if (imgMatch) {
       poster = imgMatch[1];
+    }
+    if (!poster || poster.includes("melody-lzld") || poster.includes("logo") || poster.includes("blank")) {
+      // Try standard src if data-src was not matched
+      const srcMatch = innerContent.match(/<img\s+[^>]*src=["'](https?:\/\/[^"']+)["']/i);
+      if (srcMatch) poster = srcMatch[1];
     }
     if (!poster || poster.includes("melody-lzld") || poster.includes("logo") || poster.includes("blank")) {
       poster = "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
     }
     
-    // 3. Extract title
+    // Extract title from img alt, title, or text
     let title = "";
-    const h3Match = cardContent.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
-    const titleClassMatch = cardContent.match(/class="[^"]*(title|ellipsis|pm-title-link)[^"]*"[^>]*>([\s\S]*?)<\//i);
-    const altMatch = cardContent.match(/alt=["']([^"']+)["']/i);
-    
-    if (h3Match) {
-      title = h3Match[1].replace(/<[^>]*>/g, "").trim();
-    } else if (titleClassMatch) {
-      title = titleClassMatch[2].replace(/<[^>]*>/g, "").trim();
-    } else if (altMatch) {
+    const altMatch = innerContent.match(/alt=["']([^"']+)["']/i) || innerContent.match(/title=["']([^"']+)["']/i);
+    if (altMatch) {
       title = altMatch[1].trim();
     }
+    
+    // If title not found in img alt, try text contents inside the anchor
+    if (!title || title.length < 2) {
+      const textMatch = innerContent.replace(/<[^>]*>/g, "").trim();
+      if (textMatch) title = textMatch;
+    }
+    
+    // Clean up title
+    title = title.replace(/\s+/g, " ").trim();
     
     if (title && title.length > 2) {
       if (!items.some(i => i.link === href)) {
@@ -843,20 +875,24 @@ function parseSearchHTML(html, taskKey) {
     }
   }
   
-  // Fallback anchor-image scanner if cardRegex did not find anything
+  // 2. Fallback to card-class regex if the structural scan found nothing
   if (items.length === 0) {
-    const anchorImgRegex = /<a[^>]+href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?<img[\s\S]*?>[\s\S]*?)<\/a>/gi;
-    let fallbackMatch;
-    while ((fallbackMatch = anchorImgRegex.exec(html)) !== null) {
-      const href = fallbackMatch[1];
-      const content = fallbackMatch[2];
+    const cardRegex = /<(div|a|article)[^>]+class="[^"]*(Small--Box|pm-video-thumb|pm-li-video|thumbnail|movie|card|content)[^"]*"[^>]*>([\s\S]*?)<\/\1>/gi;
+    let cardMatch;
+    while ((cardMatch = cardRegex.exec(html)) !== null) {
+      const cardContent = cardMatch[3];
+      const hrefMatch = cardContent.match(/href=["'](https?:\/\/[^"']+)["']/i);
+      if (!hrefMatch) continue;
+      const href = hrefMatch[1];
       if (href.includes("/category/") || href.includes("/actor/") || href.includes("/genre/")) continue;
       
-      const imgMatch = content.match(/(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i);
-      const poster = imgMatch ? imgMatch[1] : "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
+      let poster = "";
+      const imgMatch = cardContent.match(/(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i);
+      if (imgMatch) poster = imgMatch[1];
       
-      const altMatch = content.match(/alt=["']([^"']+)["']/i);
-      const title = altMatch ? altMatch[1].trim() : "";
+      let title = "";
+      const h3Match = cardContent.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+      if (h3Match) title = h3Match[1].replace(/<[^>]*>/g, "").trim();
       
       if (title && title.length > 2 && !items.some(i => i.link === href)) {
         items.push({ title, poster, link: href });
@@ -1065,7 +1101,7 @@ app.get("/api/search", async (req, res) => {
     }
   }
 
-  if (httpSucceeded) {
+  if (httpSucceeded && httpResults.length > 0) {
     console.log(`✅ [Search API] Return HTTP fetch results: ${httpResults.length} items`);
     return res.json(httpResults);
   }
@@ -2276,7 +2312,11 @@ cron.schedule("0 * * * *", async () => {
 
 async function runHourlyCronJob() {
   console.log("🎬 [Cron Job] Running movieSniffer to update movie lists...");
-  await movieSniffer();
+  const totalScraped = await movieSniffer();
+  if (!totalScraped || totalScraped === 0) {
+    console.warn("⚠️ [Cron Job] movieSniffer returned 0 items. Skipping database update to preserve existing cache.");
+    return;
+  }
 
   const categories = [
     "arabicMovies",
