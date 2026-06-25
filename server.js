@@ -175,7 +175,7 @@ async function launchBrowser() {
   }
 
   const browser = await puppeteer.launch({
-    headless: "shell",
+    headless: true,
     args,
   });
 
@@ -297,6 +297,13 @@ async function movieSniffer() {
       fallbackBase:
         "https://vid.mycima.cc/categories-cimawbas.php?cat=5-cimawbas-aflam-3arby",
     },
+      {
+      type: "direct_menu_site",
+      source: "egydead",
+      searchKey: "ايجى ديد",
+      fallbackBase:
+        "https://tv9.egydead.live/",
+    },
     // {
     //   type: "google_search",
     //   source: "google_arabic",
@@ -378,18 +385,18 @@ async function movieSniffer() {
               bodyHTML.substring(0, 500),
             );
             console.log(
-              `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Base URL loaded. Waiting 2 seconds...`,
+              `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Base URL loaded. Waiting 2 seconds...`,
             );
             await new Promise((r) => setTimeout(r, 2000));
 
             const mappedSections = await page.evaluate(() => {
               const sectionsFound = {};
               const navLinks = document.querySelectorAll(
-                "nav a, .menu a, header a, ul li a, .navbar a",
+                "nav a, .menu a, header a, ul li a, .navbar a, .slideMenu a, #pushList a",
               );
 
               navLinks.forEach((a) => {
-                const text = a.innerText.toLowerCase().trim();
+                const text = (a.textContent || a.innerText || "").toLowerCase().trim();
                 const href = a.href;
                 if (
                   !href ||
@@ -397,7 +404,8 @@ async function movieSniffer() {
                   href === window.location.href ||
                   (!href.includes("/category/") &&
                     !href.includes("/movies/") &&
-                    !href.includes("/series/"))
+                    !href.includes("/series/") &&
+                    !href.includes("/series-category/"))
                 )
                   return;
 
@@ -414,6 +422,7 @@ async function movieSniffer() {
                 const hasSeries =
                   cleanText.includes("مسلسل") || cleanText.includes("مسلسلات");
                 const isForeign =
+                  cleanText.includes("اجني") ||
                   cleanText.includes("اجنبي") ||
                   cleanText.includes("اجنبيه") ||
                   cleanText.includes("انقليزي") ||
@@ -426,12 +435,15 @@ async function movieSniffer() {
                   cleanText.includes("سوري") ||
                   cleanText.includes("لبناني");
 
+                const isDubbed = cleanText.includes("مدبلج") || cleanText.includes("مدبلجه") || href.includes("dubbed") || href.includes("%d9%85%d8%af%d8%a8%d9%84%d8%ac");
+                const isCartoon = cleanText.includes("كرتون") || cleanText.includes("انمي") || cleanText.includes("ديزني") || href.includes("cartoon") || href.includes("anime") || href.includes("%d9%83%d8%b1%d8%aa%d9%88%d9%86") || href.includes("%d8%a7%d9%86%d9%85%d9%8a");
+
                 if (hasMovies) {
-                  if (isForeign) sectionsFound["englishMovies"] = href;
-                  else if (isArabic) sectionsFound["arabicMovies"] = href;
+                  if (isForeign && !isDubbed && !isCartoon) sectionsFound["englishMovies"] = href;
+                  else if (isArabic && !isCartoon) sectionsFound["arabicMovies"] = href;
                 } else if (hasSeries) {
-                  if (isForeign) sectionsFound["englishSeries"] = href;
-                  else if (isArabic) sectionsFound["arabicSeries"] = href;
+                  if (isForeign && !isDubbed && !isCartoon) sectionsFound["englishSeries"] = href;
+                  else if (isArabic && !isCartoon) sectionsFound["arabicSeries"] = href;
                 }
               });
               return sectionsFound;
@@ -459,10 +471,10 @@ async function movieSniffer() {
             for (let key in mappedSections) {
               const sectionUrl = mappedSections[key];
               console.log(
-                `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قشط القسم [${key}] من الرابط: ${sectionUrl}`,
+                `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] جاري قشط القسم [${key}] من الرابط: ${sectionUrl}`,
               );
               console.log(
-                `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to section URL: ${sectionUrl}`,
+                `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Navigating to section URL: ${sectionUrl}`,
               );
               await page.goto(sectionUrl, {
                 waitUntil: "domcontentloaded",
@@ -478,7 +490,7 @@ async function movieSniffer() {
                 bodyHTML.substring(0, 500),
               );
               console.log(
-                `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Section URL loaded. Scrolling...`,
+                `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Section URL loaded. Scrolling...`,
               );
 
               await page.evaluate(async () => {
@@ -499,6 +511,13 @@ async function movieSniffer() {
                   if (
                     !href ||
                     !href.startsWith("http") ||
+                    href.includes("twitter.com") ||
+                    href.includes("x.com") ||
+                    href.includes("youtube.com") ||
+                    href.includes("facebook.com") ||
+                    href.includes("instagram.com") ||
+                    href.includes("t.me") ||
+                    href.includes("telegram") ||
                     href.includes("/category/") ||
                     href.includes("/actor/") ||
                     href.includes("/genre/") ||
@@ -570,9 +589,13 @@ async function movieSniffer() {
 
                   const titleEl =
                     card.querySelector("h3") || card.querySelector(".title");
-                  const titleText = titleEl
+                  let titleText = titleEl
                     ? titleEl.innerText.trim()
-                    : (imgEl.getAttribute("alt") || "").trim();
+                    : (imgEl ? (imgEl.getAttribute("alt") || imgEl.alt || "").trim() : "");
+
+                  if (!titleText || titleText.length < 2) {
+                    titleText = (card.innerText || card.textContent || "").split('\n')[0].trim();
+                  }
 
                   if (titleText && titleText.length > 2) {
                     if (!items.some((item) => item.link === href))
@@ -586,7 +609,7 @@ async function movieSniffer() {
                 return items;
               });
               console.log(
-                `🔍 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Element selection results count: ${extracted.length}`,
+                `🔍 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Element selection results count: ${extracted.length}`,
               );
 
               extracted.forEach((item) => {
@@ -616,16 +639,16 @@ async function movieSniffer() {
                 }
               });
               console.log(
-                `✅ [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] لقطنا ${tempScrapedData[key].length} عنوان في حقل [${key}]`,
+                `✅ [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] لقطنا ${tempScrapedData[key].length} عنوان في حقل [${key}]`,
               );
             }
           } catch (err) {
-            console.log("❌ فشل في توب سينما:", err.message);
+            console.log(`❌ فشل في ${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}:`, err.message);
           } finally {
             try {
               await page.close();
             } catch (e) {
-              console.log("⚠️ فشل إغلاق الصفحة (توب سينما):", e.message);
+              console.log(`⚠️ فشل إغلاق الصفحة (${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}):`, e.message);
             }
           }
         }
@@ -831,6 +854,13 @@ function parseSearchHTML(html, taskKey) {
       href.includes("/year/") || 
       href.includes("/tag/") ||
       href.includes("/tags/") ||
+      href.includes("twitter.com") ||
+      href.includes("x.com") ||
+      href.includes("youtube.com") ||
+      href.includes("facebook.com") ||
+      href.includes("instagram.com") ||
+      href.includes("t.me") ||
+      href.includes("telegram") ||
       href.includes("javascript:") ||
       href.includes("#")
     ) {
@@ -884,7 +914,18 @@ function parseSearchHTML(html, taskKey) {
       const hrefMatch = cardContent.match(/href=["'](https?:\/\/[^"']+)["']/i);
       if (!hrefMatch) continue;
       const href = hrefMatch[1];
-      if (href.includes("/category/") || href.includes("/actor/") || href.includes("/genre/")) continue;
+      if (
+        href.includes("/category/") || 
+        href.includes("/actor/") || 
+        href.includes("/genre/") ||
+        href.includes("twitter.com") ||
+        href.includes("x.com") ||
+        href.includes("youtube.com") ||
+        href.includes("facebook.com") ||
+        href.includes("instagram.com") ||
+        href.includes("t.me") ||
+        href.includes("telegram")
+      ) continue;
       
       let poster = "";
       const imgMatch = cardContent.match(/(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i);
@@ -1003,7 +1044,6 @@ app.get("/api/search", async (req, res) => {
   // Define active domains for search targets
   const activeDomains = {
     topcinema: "https://topcinemaa.cam",
-    arabseed: "https://a.asd.ink",
     mycima: "https://vid.mycima.cc"
   };
 
@@ -1028,11 +1068,7 @@ app.get("/api/search", async (req, res) => {
   
   if (isArabic) {
     tasks.push(
-      {
-        url: `${activeDomains.arabseed}/?s=${encodeURIComponent(query)}`,
-        source: "arabseed",
-        key: "arabicMovies"
-      },
+
       {
         url: `${activeDomains.mycima}/search.php?keywords=${encodeURIComponent(query)}&video-id=`,
         source: "mycima",
@@ -1041,8 +1077,8 @@ app.get("/api/search", async (req, res) => {
     );
   } else {
     tasks.push({
-      url: `${activeDomains.topcinema}/search/?query=${encodeURIComponent(query)}&type=all`,
-      source: "topcinema",
+      url: `https://tv9.egydead.live/?s=${encodeURIComponent(query)}`,
+      source: "egydead",
       key: "englishMovies"
     });
   }
@@ -1058,6 +1094,8 @@ app.get("/api/search", async (req, res) => {
     try {
       console.log(`📡 [Search HTTP] Fetching ${task.source} search page: ${task.url}`);
       const html = await fetchSearchHTTP(task.url);
+      console.log(task.url);
+      
       const extracted = parseSearchHTML(html, task.key);
       console.log(`✅ [Search HTTP] Extracted ${extracted.length} movies from ${task.source}`);
 
@@ -1158,7 +1196,18 @@ app.get("/api/search", async (req, res) => {
             }
 
             const href = validAnchor?.href;
-            if (!href || !href.startsWith("http")) return;
+            if (
+              !href ||
+              !href.startsWith("http") ||
+              href.includes("twitter.com") ||
+              href.includes("x.com") ||
+              href.includes("youtube.com") ||
+              href.includes("facebook.com") ||
+              href.includes("instagram.com") ||
+              href.includes("t.me") ||
+              href.includes("telegram")
+            )
+              return;
 
             let posterUrl = "";
             const imgEl = card.querySelector("img");
@@ -1182,7 +1231,10 @@ app.get("/api/search", async (req, res) => {
             if (!posterUrl || posterUrl.includes("logo") || posterUrl.includes("blank")) return;
 
             const titleEl = card.querySelector("h3") || card.querySelector(".title") || card.querySelector(".ellipsis") || card.querySelector(".pm-title-link");
-            const title = titleEl ? titleEl.innerText.trim() : (imgEl && imgEl.alt ? imgEl.alt.trim() : "");
+            let title = titleEl ? titleEl.innerText.trim() : (imgEl && imgEl.alt ? imgEl.alt.trim() : "");
+            if (!title || title.length < 2) {
+              title = (validAnchor ? (validAnchor.innerText || validAnchor.textContent) : "").split('\n')[0].trim();
+            }
 
             if (title && title.length > 2) {
               if (!items.some((i) => i.link === href)) {
@@ -1329,25 +1381,97 @@ async function getOrSniffStream(url) {
       console.log("🔍 [Sniffer] Movie page loaded. Title:", await page.title());
     } catch (e) {
       console.log(
-        `⚠️ [Sniffer] Navigation timeout (will still try extraction): ${e.message}`,
+        `⚠️ [Sniffer] Navigation timeout: ${e.message}`,
       );
-      // Give the browser 5 extra seconds after partial load
-      await new Promise((r) => setTimeout(r, 5000));
     }
+
+    // Check if there is a "Watch Now" (المشاهدة والتحميل) button that needs to be clicked
+    try {
+      const watchNowSelector = ".watchNow button, button.watchNow, .watchNow input[type='submit']";
+      const hasWatchButton = await page.evaluate((sel) => {
+        const btn = document.querySelector(sel);
+        if (btn) return true;
+        const buttons = Array.from(document.querySelectorAll("button, input[type='submit'], a"));
+        for (let b of buttons) {
+          const txt = b.innerText || b.textContent || "";
+          if (txt.includes("المشاهده والتحميل") || txt.includes("المشاهدة والتحميل")) {
+            return true;
+          }
+        }
+        return false;
+      }, watchNowSelector);
+
+      if (hasWatchButton) {
+        console.log("🎯 [Sniffer] Found a 'Watch Now' button/form. Clicking it to reveal streams...");
+        await page.evaluate((sel) => {
+          const btn = document.querySelector(sel);
+          if (btn) {
+            btn.click();
+            return;
+          }
+          const buttons = Array.from(document.querySelectorAll("button, input[type='submit'], a"));
+          for (let b of buttons) {
+            const txt = b.innerText || b.textContent || "";
+            if (txt.includes("المشاهده والتحميل") || txt.includes("المشاهدة والتحميل")) {
+              b.click();
+              return;
+            }
+          }
+        }, watchNowSelector);
+        
+        console.log("🎯 [Sniffer] Clicked button, waiting for page navigation...");
+        await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15000 }).catch((e) => {
+          console.log(`⚠️ [Sniffer] Navigation warning after click: ${e.message}`);
+        });
+      }
+    } catch (btnErr) {
+      console.error("⚠️ [Sniffer] Error checking/clicking Watch Now button:", btnErr.message);
+    }
+
+    // Always wait 4 seconds for dynamic elements/AJAX to load on the page
+    await new Promise((r) => setTimeout(r, 4000));
 
     // ── Step 2: Always extract embed URL even after timeout ──
     console.log("🔍 [Sniffer] Extracting embed player from page DOM...");
     let embedUrl = null;
     try {
       embedUrl = await page.evaluate(() => {
-        // 1. Check all iframes
+        // 0. Prioritize checking for explicit server elements (e.g. EgyDead .servers buttons, or class/id containing server)
+        const serverElements = document.querySelectorAll(".servers, .serversList li, [class*=\"server\"] li, [class*=\"server\"] a, [class*=\"server\"] button, [class*=\"server\"], [id*=\"server\"], .server-item");
+        for (let el of serverElements) {
+          const src = el.getAttribute("data-url") || el.getAttribute("data-src") || el.getAttribute("data-link") || el.href;
+          if (
+            src && 
+            src.startsWith("http") && 
+            !src.includes("youtube.com") && 
+            !src.includes("youtu.be") && 
+            !src.includes("facebook.com") && 
+            !src.includes("twitter.com") &&
+            !src.includes("google.com")
+          ) {
+            return src;
+          }
+        }
+
+        // 1. Check all iframes, ignoring social/trailer iframes
         const iframes = Array.from(document.querySelectorAll("iframe"));
         for (let iframe of iframes) {
           const src =
             iframe.src ||
             iframe.getAttribute("data-src") ||
             iframe.getAttribute("data-lazy-src");
-          if (src && src.startsWith("http")) return src;
+          if (
+            src && 
+            src.startsWith("http") && 
+            !src.includes("youtube.com") && 
+            !src.includes("youtu.be") && 
+            !src.includes("facebook.com") && 
+            !src.includes("google.com") &&
+            !src.includes("twitter.com") &&
+            !src.includes("instagram.com")
+          ) {
+            return src;
+          }
         }
         // 2. Check video elements directly
         const videos = Array.from(
@@ -2201,7 +2325,8 @@ app.get("/api/media/stream", async (req, res) => {
     }
   }
 
-  console.log(`🎬 [Media Stream API] Cache-First request for: ${targetUrl}`);
+  const bypassCache = req.query.bypassCache === "true" || req.query.refresh === "true";
+  console.log(`🎬 [Media Stream API] Request for: ${targetUrl} (bypassCache: ${bypassCache})`);
 
   try {
     // 1. Check MongoDB first (Cache-First)
@@ -2209,7 +2334,9 @@ app.get("/api/media/stream", async (req, res) => {
     console.log("cached", cached);
     
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-    if (cached && cached.streamUrl && cached.fetchedAt && cached.fetchedAt > twoHoursAgo) {
+    const isCachedStreamInvalid = cached && cached.streamUrl && (cached.streamUrl.includes("youtube.com") || cached.streamUrl.includes("youtu.be"));
+    
+    if (!bypassCache && cached && cached.streamUrl && cached.fetchedAt && cached.fetchedAt > twoHoursAgo && !isCachedStreamInvalid) {
       console.log(
         `⚡ [Cache Hit - DB] Found fresh stream in database for: ${targetUrl}`,
       );
@@ -2247,8 +2374,8 @@ app.get("/api/media/stream", async (req, res) => {
         .json({ error: "لم يتم العثور على رابط بث نظيف حالياً" });
     }
   } catch (err) {
-    console.error(`❌ Error in /api/media/stream:`, err.message);
-    return res.status(500).json({ error: "حدث خطأ أثناء قنص البث" });
+    console.error(`❌ Error in /api/media/stream:`, err.stack || err.message);
+    return res.status(500).json({ error: "حدث خطأ أثناء قنص البث", debug: err.message, stack: err.stack });
   }
 });
 

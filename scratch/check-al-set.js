@@ -1,7 +1,7 @@
 async function checkMovie() {
   try {
     const res = await fetch(
-      "https://live-world-cup.onrender.com/api/movies/arabic",
+      "http://localhost:3001/api/movies/arabic",
     );
     const data = await res.json();
     console.log("Total movies found:", data.length);

@@ -7,54 +7,107 @@ import { ArrowRight, Film, RefreshCw } from "lucide-react";
 
 function DirectVideoPlayer({ src }) {
   const videoRef = useRef(null);
+  const playerRef = useRef(null);
+  const [plyrLoaded, setPlyrLoaded] = useState(false);
 
   useEffect(() => {
+    // 1. Inject Plyr CSS
+    const linkId = "plyr-cdn-css";
+    if (!document.getElementById(linkId)) {
+      const link = document.createElement("link");
+      link.id = linkId;
+      link.rel = "stylesheet";
+      link.href = "https://cdn.plyr.io/3.7.8/plyr.css";
+      document.head.appendChild(link);
+    }
+
+    // 2. Inject Plyr JS
+    const scriptId = "plyr-cdn-js";
+    let script = document.getElementById(scriptId);
+    if (!script) {
+      script = document.createElement("script");
+      script.id = scriptId;
+      script.src = "https://cdn.plyr.io/3.7.8/plyr.js";
+      script.async = true;
+      script.onload = () => setPlyrLoaded(true);
+      document.body.appendChild(script);
+    } else {
+      if (window.Plyr) {
+        setPlyrLoaded(true);
+      } else {
+        script.addEventListener("load", () => setPlyrLoaded(true));
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!plyrLoaded) return;
     const video = videoRef.current;
     if (!video) return;
 
     let hls;
+    let plyrPlayer;
+
     const initPlayer = async () => {
+      const Hls = (await import("hls.js")).default;
+      
+      const setupPlyr = () => {
+        plyrPlayer = new window.Plyr(video, {
+          controls: [
+            'play-large', 'play', 'progress', 'current-time', 
+            'duration', 'mute', 'volume', 'captions', 
+            'settings', 'pip', 'airplay', 'fullscreen'
+          ],
+          settings: ['captions', 'quality', 'speed', 'loop']
+        });
+        playerRef.current = plyrPlayer;
+      };
+
       if (src.includes(".m3u8") || src.includes("urlset")) {
-        const Hls = (await import("hls.js")).default;
         if (Hls.isSupported()) {
           hls = new Hls();
           hls.loadSource(src);
           hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            setupPlyr();
+          });
         } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
           video.src = src;
+          setupPlyr();
         }
       } else {
         video.src = src;
+        setupPlyr();
       }
     };
 
     initPlayer();
 
     return () => {
+      if (playerRef.current) {
+        try {
+          playerRef.current.destroy();
+        } catch (e) {}
+      }
       if (hls) {
         hls.destroy();
       }
     };
-  }, [src]);
+  }, [src, plyrLoaded]);
 
   return (
-    <video
-      ref={videoRef}
-      controls
-      autoPlay
-      className="w-full h-full aspect-video rounded-xl shadow-2xl video-shell"
-      style={{
-        width: "100%",
-        height: "100%",
-        border: "none",
-        borderRadius: "var(--radius-xl)",
-        backgroundColor: "#000",
-      }}
-      referrerPolicy="no-referrer"
-      crossOrigin="anonymous"
-    />
+    <div className="plyr-wrapper w-full h-full rounded-xl overflow-hidden shadow-2xl" style={{ width: "100%", height: "100%", background: "#000" }}>
+      <video
+        ref={videoRef}
+        className="plyr-video w-full h-full"
+        crossOrigin="anonymous"
+        playsInline
+        controls
+      />
+    </div>
   );
 }
+
 
 function WatchContent() {
   const searchParams = useSearchParams();
@@ -73,26 +126,26 @@ function WatchContent() {
   // تحديد الـ API المناسب للبحث عن الفيلم بناءً على الـ ID
   let listApiUrl = "";
   if (id && id.startsWith("englishMovies")) {
-    listApiUrl = "https://live-world-cup.onrender.com/api/movies/english";
+    listApiUrl = "http://localhost:3001/api/movies/english";
   } else if (id && id.startsWith("arabicMovies")) {
-    listApiUrl = "https://live-world-cup.onrender.com/api/movies/arabic";
+    listApiUrl = "http://localhost:3001/api/movies/arabic";
   } else if (id && id.startsWith("englishSeries")) {
-    listApiUrl = "https://live-world-cup.onrender.com/api/series/english";
+    listApiUrl = "http://localhost:3001/api/series/english";
   } else if (id && id.startsWith("arabicSeries")) {
-    listApiUrl = "https://live-world-cup.onrender.com/api/series/arabic";
+    listApiUrl = "http://localhost:3001/api/series/arabic";
   } else {
-    listApiUrl = "https://live-world-cup.onrender.com/api/movies/english";
+    listApiUrl = "http://localhost:3001/api/movies/english";
   }
 
-  const fetchStreamUrl = async () => {
+  const fetchStreamUrl = async (bypassCache = false) => {
     if (!id) {
       setError("معرّف الفيلم غير موجود في الطلب.");
       setIsLoading(false);
       return;
     }
 
-    // منع تكرار الطلب لنفس المعرّف
-    if (fetchedIdRef.current === id) {
+    // منع تكرار الطلب لنفس المعرّف (إلا في حالة التحديث اليدوي)
+    if (!bypassCache && fetchedIdRef.current === id) {
       return;
     }
     fetchedIdRef.current = id;
@@ -122,7 +175,10 @@ function WatchContent() {
       console.log("Found movie:", url + "/watch");
 
       // 2. جلب سيرفر البث المباشر النظيف باستخدام الـ targetUrl الأصلي
-      const apiUrl = `https://live-world-cup.onrender.com/api/media/stream?targetUrl=${encodeURIComponent(url)}`;
+      let apiUrl = `http://localhost:3001/api/media/stream?targetUrl=${encodeURIComponent(url)}`;
+      if (bypassCache) {
+        apiUrl += "&bypassCache=true";
+      }
       const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error("فشل جلب سيرفر البث من الخادم.");
@@ -147,7 +203,7 @@ function WatchContent() {
 
   useEffect(() => {
     if (id) {
-      fetchStreamUrl();
+      fetchStreamUrl(false);
     }
   }, [id]);
 
@@ -235,20 +291,52 @@ function WatchContent() {
       </div>
 
       {/* عنوان الفيلم وتفاصيل إضافية */}
-      <div className="watch-title-area">
-        <h1 className="watch-movie-title">{title}</h1>
-        <p
+      <div className="watch-title-area" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
+        <div>
+          <h1 className="watch-movie-title">{title}</h1>
+          <p
+            style={{
+              color: "var(--clr-text-muted)",
+              fontSize: "14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <Film size={16} />
+            <span>بث مباشر نظيف • جودة عالية خالية من الإعلانات المنبثقة</span>
+          </p>
+        </div>
+        <button
+          onClick={() => fetchStreamUrl(true)}
+          title="إعادة قنص السيرفر وتحديث البث لتجنب الأخطاء أو الكاش التالف"
           style={{
-            color: "var(--clr-text-muted)",
-            fontSize: "14px",
             display: "flex",
             alignItems: "center",
             gap: "8px",
+            background: "rgba(255, 255, 255, 0.05)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            color: "var(--clr-text)",
+            padding: "10px 18px",
+            borderRadius: "var(--radius-lg)",
+            cursor: "pointer",
+            fontSize: "14px",
+            fontWeight: "500",
+            transition: "all 0.2s",
+            outline: "none"
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)";
+            e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.2)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+            e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.1)";
           }}
         >
-          <Film size={16} />
-          <span>بث مباشر نظيف • جودة عالية خالية من الإعلانات المنبثقة</span>
-        </p>
+          <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
+          <span>تحديث البث (إعادة قنص)</span>
+        </button>
       </div>
     </div>
   );

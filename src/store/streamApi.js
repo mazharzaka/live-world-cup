@@ -4,7 +4,7 @@ export const streamApi = createApi({
   reducerPath: "streamApi",
   baseQuery: fetchBaseQuery({
     baseUrl:
-      process.env.NEXT_PUBLIC_API_URL || "https://live-world-cup.onrender.com/",
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/",
   }),
   endpoints: (builder) => ({
     getSchedule: builder.query({

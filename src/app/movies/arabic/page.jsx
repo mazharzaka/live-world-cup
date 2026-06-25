@@ -33,7 +33,7 @@ export default function ArabicMoviesPage() {
     setError(null);
     try {
       const response = await fetch(
-        "https://live-world-cup.onrender.com/api/movies/arabic",
+        "http://localhost:3001/api/movies/arabic",
       );
       if (!response.ok) {
         throw new Error("فشل جلب البيانات من الخادم");
