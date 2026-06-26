@@ -38,8 +38,9 @@ function SearchResults() {
     setIsLoading(true);
     setError(null);
     try {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       const response = await fetch(
-        `http://localhost:3001/api/search?q=${encodeURIComponent(query)}`,
+        `${apiBaseUrl}/api/search?q=${encodeURIComponent(query)}`,
       );
       if (!response.ok) {
         throw new Error("فشل جلب البيانات من الخادم");

@@ -123,18 +123,20 @@ function WatchContent() {
 
   const fetchedIdRef = useRef("");
 
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
   // تحديد الـ API المناسب للبحث عن الفيلم بناءً على الـ ID
   let listApiUrl = "";
   if (id && id.startsWith("englishMovies")) {
-    listApiUrl = "http://localhost:3001/api/movies/english";
+    listApiUrl = `${apiBaseUrl}/api/movies/english`;
   } else if (id && id.startsWith("arabicMovies")) {
-    listApiUrl = "http://localhost:3001/api/movies/arabic";
+    listApiUrl = `${apiBaseUrl}/api/movies/arabic`;
   } else if (id && id.startsWith("englishSeries")) {
-    listApiUrl = "http://localhost:3001/api/series/english";
+    listApiUrl = `${apiBaseUrl}/api/series/english`;
   } else if (id && id.startsWith("arabicSeries")) {
-    listApiUrl = "http://localhost:3001/api/series/arabic";
+    listApiUrl = `${apiBaseUrl}/api/series/arabic`;
   } else {
-    listApiUrl = "http://localhost:3001/api/movies/english";
+    listApiUrl = `${apiBaseUrl}/api/movies/english`;
   }
 
   const fetchStreamUrl = async (bypassCache = false) => {
@@ -175,7 +177,7 @@ function WatchContent() {
       console.log("Found movie:", url + "/watch");
 
       // 2. جلب سيرفر البث المباشر النظيف باستخدام الـ targetUrl الأصلي
-      let apiUrl = `http://localhost:3001/api/media/stream?targetUrl=${encodeURIComponent(url)}`;
+      let apiUrl = `${apiBaseUrl}/api/media/stream?targetUrl=${encodeURIComponent(url)}`;
       if (bypassCache) {
         apiUrl += "&bypassCache=true";
       }

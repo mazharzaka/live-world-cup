@@ -32,8 +32,9 @@ export default function ArabicMoviesPage() {
     setIsLoading(true);
     setError(null);
     try {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       const response = await fetch(
-        "http://localhost:3001/api/movies/arabic",
+        `${apiBaseUrl}/api/movies/arabic`,
       );
       if (!response.ok) {
         throw new Error("فشل جلب البيانات من الخادم");
