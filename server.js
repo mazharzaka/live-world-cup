@@ -319,8 +319,7 @@ async function movieSniffer() {
   ];
 
   try {
-    await Promise.all(
-      tasks.map(async (task) => {
+    for (const task of tasks) {
         console.log(
           `🚀 [Ultimate Scraper] Opening new page for task: ${task.source}`,
         );
@@ -761,8 +760,7 @@ async function movieSniffer() {
             }
           }
         }
-      }),
-    );
+    }
 
     console.log(
       "📊 ⚡ [المعمارية قفلت اللعبة] توب سينما قشط الأجنبي لايف، وجوجل قشط العربي لايف بنجاح توازي تامة!",
@@ -2140,12 +2138,7 @@ async function masterSniffer() {
       console.error("❌ [DB] Error saving matches to database:", err.message);
     }
 
-    // Pre-sniff the main stream URL for all live matches in the background
-    for (const match of grouped) {
-      if (match.isLive && match.targetSiteUrl) {
-        getOrSniffStream(match.targetSiteUrl).catch(() => {});
-      }
-    }
+    // Background stream pre-sniffing disabled to prevent OOM crashes on Render
   } else {
     // محاولة جلب المباريات من قاعدة البيانات قبل التحميل الوهمي
     try {
@@ -2301,9 +2294,14 @@ async function sniffStream(url, page) {
   return caught;
 }
 
-// تشغيل وتكرار العملية كل 15 دقيقة
-masterSniffer();
-setInterval(masterSniffer, 15 * 60 * 1000);
+// Schedule initial matches scraping after 45 seconds to avoid high RAM/CPU on boot
+setTimeout(() => {
+  console.log("⏰ [Startup Background] Starting initial matches scraping (masterSniffer) now...");
+  masterSniffer().catch((err) => console.error("Error in initial masterSniffer:", err));
+  
+  // Repeat the process every 15 minutes
+  setInterval(masterSniffer, 15 * 60 * 1000);
+}, 45000);
 
 // الـ APIs للـ Frontend
 app.get("/api/schedule", (req, res) => res.json(scrapedMatches));
@@ -2644,20 +2642,22 @@ async function initializeStartup() {
   }
 }
 
+// Pre-populate with fallback matches immediately to have data during DB connection phase
+loadFallback();
+
+// Start Express server immediately and bind to the PORT to avoid 502 Bad Gateway on Render
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`🚀 Slayer Scraper Running on Port ${PORT} (Initializing DB connection in background...)`);
+});
+
+// Handle the background DB connection results when they resolve
 dbConnectPromise
   .then(async () => {
     await initializeStartup();
-    const PORT = process.env.PORT || 3001;
-    app.listen(PORT, () =>
-      console.log(`🚀 Slayer Scraper Running on Port ${PORT}`),
-    );
   })
-  .catch(() => {
-    // If DB connection fails, start server anyway with fallbacks
+  .catch((err) => {
+    console.error("❌ MongoDB Connection Error on startup:", err.message || err);
     console.log("⚠️ Starting server in Fallback Mode (No DB connection)...");
     initializeStartup();
-    const PORT = process.env.PORT || 3001;
-    app.listen(PORT, () =>
-      console.log(`🚀 Slayer Scraper Running on Port ${PORT} (Fallback Mode - No DB)`),
-    );
   });
