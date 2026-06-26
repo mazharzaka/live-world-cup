@@ -1785,7 +1785,8 @@ async function getOrSniffStream(url) {
     if (err.message === "STREAM_CAUGHT") {
       console.log(`🎯 [Sniffer] Stream caught! Closing browser and returning.`);
     } else {
-      console.error(`❌ Sniffer error:`, err.message);
+      console.error(`❌ Sniffer error:`, err.stack || err.message);
+      throw err;
     }
   } finally {
     if (browser) {
