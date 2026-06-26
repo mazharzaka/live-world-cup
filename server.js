@@ -2418,10 +2418,10 @@ app.get("/api/media/stream", async (req, res) => {
     const cached = await Media.findOne({ url: targetUrl });
     console.log("cached", cached);
     
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000);
     const isCachedStreamInvalid = cached && cached.streamUrl && (cached.streamUrl.includes("youtube.com") || cached.streamUrl.includes("youtu.be"));
     
-    if (!bypassCache && cached && cached.streamUrl && cached.fetchedAt && cached.fetchedAt > twoHoursAgo && !isCachedStreamInvalid) {
+    if (!bypassCache && cached && cached.streamUrl && cached.fetchedAt && cached.fetchedAt > oneHourAgo && !isCachedStreamInvalid) {
       console.log(
         `⚡ [Cache Hit - DB] Found fresh stream in database for: ${targetUrl}`,
       );
