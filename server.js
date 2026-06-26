@@ -1418,7 +1418,7 @@ async function getOrSniffStream(url) {
     try {
       await page.goto(cleanUrl, {
         waitUntil: "domcontentloaded",
-        timeout: 15000, // Reduced from 60000 to avoid hanging
+        timeout: 30000, // Increased to 30000 for slow Render servers
       });
       console.log("🔍 [Sniffer] Movie page loaded. Title:", await page.title());
     } catch (e) {
@@ -1701,7 +1701,7 @@ async function getOrSniffStream(url) {
           try {
             await page.goto(nestedEmbed, {
               waitUntil: "domcontentloaded",
-              timeout: 15000,
+              timeout: 30000, // Increased to 30000 for slow Render servers
             });
           } catch (e) {
             for (let i = 0; i < 4; i++) {
@@ -2217,7 +2217,7 @@ async function sniffStream(url, page) {
 
   try {
     console.log(`[Sniffer] Loading: ${url}`);
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await new Promise((r) => setTimeout(r, 4000));
 
     if (caught) {
