@@ -2425,7 +2425,21 @@ app.get("/api/media/stream", async (req, res) => {
       console.log(
         `⚡ [Cache Hit - DB] Found fresh stream in database for: ${targetUrl}`,
       );
-      return res.json({ streamUrl: cached.streamUrl, type: cached.type });
+      
+      let finalUrl = cached.streamUrl;
+      let finalType = cached.type;
+      
+      if (finalUrl.includes(".m3u8") || finalUrl.includes("urlset")) {
+        const isLocalhost = req.headers.host && (req.headers.host.includes("localhost") || req.headers.host.includes("127.0.0.1"));
+        if (!isLocalhost) {
+          console.log(`📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP lock: ${finalUrl}`);
+          const protocol = req.secure ? "https" : "http";
+          finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}`;
+          finalType = "direct";
+        }
+      }
+      
+      return res.json({ streamUrl: finalUrl, type: finalType });
     }
 
     console.log(
@@ -2452,7 +2466,20 @@ app.get("/api/media/stream", async (req, res) => {
         ),
       );
 
-      return res.json({ streamUrl: result.streamUrl, type: result.type });
+      let finalUrl = result.streamUrl;
+      let finalType = result.type;
+      
+      if (finalUrl.includes(".m3u8") || finalUrl.includes("urlset")) {
+        const isLocalhost = req.headers.host && (req.headers.host.includes("localhost") || req.headers.host.includes("127.0.0.1"));
+        if (!isLocalhost) {
+          console.log(`📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP lock: ${finalUrl}`);
+          const protocol = req.secure ? "https" : "http";
+          finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}`;
+          finalType = "direct";
+        }
+      }
+
+      return res.json({ streamUrl: finalUrl, type: finalType });
     } else {
       return res
         .status(404)
