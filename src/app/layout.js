@@ -7,6 +7,7 @@
 import './globals.css';
 import Providers from './providers';
 import Header from '../components/Header';
+import SplashScreen from '../components/SplashScreen';
 
 export const metadata = {
   title: '🎬 ستريم هنتر – منصة البث المباشر والأفلام',
@@ -33,6 +34,7 @@ export default function RootLayout({ children }) {
       </head>
       <body>
         <Providers>
+          <SplashScreen />
           <div className="app-shell">
             <Header />
             {children}

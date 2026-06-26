@@ -32,8 +32,9 @@ export default function MoviesPage() {
     setIsLoading(true);
     setError(null);
     try {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       const response = await fetch(
-        "https://live-world-cup.onrender.com/api/movies/english",
+        `${apiBaseUrl}/api/movies/english`,
       );
       if (!response.ok) {
         throw new Error("فشل جلب البيانات من الخادم");
