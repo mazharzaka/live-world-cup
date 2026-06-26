@@ -48,6 +48,54 @@ function DirectVideoPlayer({ src }) {
     let hls;
     let plyrPlayer;
 
+    const handleKeyDown = (e) => {
+      if (!playerRef.current) return;
+
+      // Don't intercept if user is typing in an input or textarea
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.isContentEditable)
+      ) {
+        return;
+      }
+
+      const player = playerRef.current;
+      const key = e.key.toLowerCase();
+      const code = e.code;
+
+      if (code === "Space" || key === " " || key === "spacebar") {
+        e.preventDefault();
+        if (player.paused) {
+          player.play();
+        } else {
+          player.pause();
+        }
+      } else if (code === "ArrowLeft" || key === "arrowleft") {
+        e.preventDefault();
+        player.currentTime = Math.max(0, player.currentTime - 5);
+      } else if (code === "ArrowRight" || key === "arrowright") {
+        e.preventDefault();
+        player.currentTime = Math.min(player.duration || 0, player.currentTime + 5);
+      } else if (code === "ArrowUp" || key === "arrowup") {
+        e.preventDefault();
+        player.volume = Math.min(1, player.volume + 0.05);
+      } else if (code === "ArrowDown" || key === "arrowdown") {
+        e.preventDefault();
+        player.volume = Math.max(0, player.volume - 0.05);
+      } else if (code === "KeyF" || key === "f" || key === "ب") {
+        e.preventDefault();
+        player.fullscreen.toggle();
+      } else if (code === "KeyM" || key === "m" || key === "ة") {
+        e.preventDefault();
+        player.muted = !player.muted;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
     const initPlayer = async () => {
       const Hls = (await import("hls.js")).default;
       
@@ -58,7 +106,9 @@ function DirectVideoPlayer({ src }) {
             'duration', 'mute', 'volume', 'captions', 
             'settings', 'pip', 'airplay', 'fullscreen'
           ],
-          settings: ['captions', 'quality', 'speed', 'loop']
+          settings: ['captions', 'quality', 'speed', 'loop'],
+          keyboard: { focused: true, global: false },
+          seekTime: 5
         });
         playerRef.current = plyrPlayer;
       };
@@ -84,10 +134,12 @@ function DirectVideoPlayer({ src }) {
     initPlayer();
 
     return () => {
+      window.removeEventListener("keydown", handleKeyDown);
       if (playerRef.current) {
         try {
           playerRef.current.destroy();
         } catch (e) {}
+        playerRef.current = null;
       }
       if (hls) {
         hls.destroy();
