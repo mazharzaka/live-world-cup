@@ -120,9 +120,7 @@ function MatchCard({ match, isActive, onWatch }) {
 
 // ─── Helper: Dynamic API Base URL ──────────────────────────────────────────────
 const getApiBaseUrl = () => {
-  return (
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
-  );
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 };
 // ─── Helper: Get Servers List ──────────────────────────────────────────────────
 const getServers = (match) => {
@@ -147,7 +145,6 @@ export default function HomePage() {
   const [showControls, setShowControls] = useState(true);
   const [streamUrl, setStreamUrl] = useState("");
   const [streamType, setStreamType] = useState("direct");
-
 
   // ─── RTK Query ──────────────────────────────────────────────────────────
   const {
@@ -201,6 +198,14 @@ export default function HomePage() {
         day: "numeric",
       }),
     );
+  }, []);
+
+  // ─── قفل التمرير الخارجي للصفحة الرئيسية ──────────────────────────────────
+  useEffect(() => {
+    document.body.classList.add("fixed-page");
+    return () => {
+      document.body.classList.remove("fixed-page");
+    };
   }, []);
 
   // ─── تشغيل البث المباشر للسيرفر المختار ────────────────────────────────────
@@ -288,7 +293,6 @@ export default function HomePage() {
     },
     [destroyHls, setStreamUrl, setStreamType],
   );
-
 
   // ─── تشغيل مباراة ────────────────────────────────────────────────────────
   const handleWatchMatch = useCallback(
@@ -517,23 +521,27 @@ export default function HomePage() {
             </div>
 
             {/* مشغل الفيديو iframe */}
-            {currentMatch && !isLoadingStream && !hasError && streamType === "iframe" && streamUrl && (
-              <iframe
-                src={streamUrl}
-                className="w-full h-full aspect-video rounded-xl shadow-2xl"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  border: "none",
-                  borderRadius: "var(--radius-xl)",
-                  background: "#000",
-                }}
-                allowFullScreen
-                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
-                referrerPolicy="no-referrer"
-              />
-            )}
+            {currentMatch &&
+              !isLoadingStream &&
+              !hasError &&
+              streamType === "iframe" &&
+              streamUrl && (
+                <iframe
+                  src={streamUrl}
+                  className="w-full h-full aspect-video rounded-xl shadow-2xl"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    border: "none",
+                    borderRadius: "var(--radius-xl)",
+                    background: "#000",
+                  }}
+                  allowFullScreen
+                  allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+                  referrerPolicy="no-referrer"
+                />
+              )}
 
             {/* ─── عنصر الفيديو الرئيسي (HTML5 Video) ─────────────── */}
             <video
@@ -565,96 +573,103 @@ export default function HomePage() {
             />
 
             {/* زر تشغيل مركزي مخصص عند الإيقاف المؤقت */}
-            {currentMatch && !isLoadingStream && !hasError && !isPlaying && streamType !== "iframe" && (
-              <button
-                className="video-center-btn"
-                onClick={handlePlayPause}
-                aria-label="تشغيل"
-              >
-                <span className="play-icon">▶</span>
-              </button>
-            )}
+            {currentMatch &&
+              !isLoadingStream &&
+              !hasError &&
+              !isPlaying &&
+              streamType !== "iframe" && (
+                <button
+                  className="video-center-btn"
+                  onClick={handlePlayPause}
+                  aria-label="تشغيل"
+                >
+                  <span className="play-icon">▶</span>
+                </button>
+              )}
 
             {/* شريط التحكم المخصص السفلي */}
-            {currentMatch && !isLoadingStream && !hasError && streamType !== "iframe" && (
-              <div
-                className={`video-controls-bar ${showControls ? "visible" : ""}`}
-              >
-                {/* اليسار: أزرار التحكم والتشغيل والصوت */}
-                <div className="controls-left">
-                  <button
-                    className="control-btn play-pause-btn"
-                    onClick={handlePlayPause}
-                    aria-label={isPlaying ? "إيقاف مؤقت" : "تشغيل"}
-                  >
-                    {isPlaying ? "⏸" : "▶"}
-                  </button>
-
-                  <div className="volume-control-group">
+            {currentMatch &&
+              !isLoadingStream &&
+              !hasError &&
+              streamType !== "iframe" && (
+                <div
+                  className={`video-controls-bar ${showControls ? "visible" : ""}`}
+                >
+                  {/* اليسار: أزرار التحكم والتشغيل والصوت */}
+                  <div className="controls-left">
                     <button
-                      className="control-btn mute-btn"
-                      onClick={handleMuteToggle}
-                      aria-label={isMuted ? "إلغاء كتم الصوت" : "كتم الصوت"}
+                      className="control-btn play-pause-btn"
+                      onClick={handlePlayPause}
+                      aria-label={isPlaying ? "إيقاف مؤقت" : "تشغيل"}
                     >
-                      {isMuted || volume === 0
-                        ? "🔇"
-                        : volume < 0.5
-                          ? "🔉"
-                          : "🔊"}
+                      {isPlaying ? "⏸" : "▶"}
                     </button>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={volume}
-                      onChange={handleVolumeChange}
-                      className="volume-slider"
-                      aria-label="مستوى الصوت"
-                    />
+
+                    <div className="volume-control-group">
+                      <button
+                        className="control-btn mute-btn"
+                        onClick={handleMuteToggle}
+                        aria-label={isMuted ? "إلغاء كتم الصوت" : "كتم الصوت"}
+                      >
+                        {isMuted || volume === 0
+                          ? "🔇"
+                          : volume < 0.5
+                            ? "🔉"
+                            : "🔊"}
+                      </button>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={volume}
+                        onChange={handleVolumeChange}
+                        className="volume-slider"
+                        aria-label="مستوى الصوت"
+                      />
+                    </div>
+                  </div>
+
+                  {/* الوسط: اسم المباراة وبادج البث المباشر */}
+                  <div className="controls-center">
+                    <span className="controls-live-badge">
+                      <span className="controls-live-dot" />
+                      مباشر
+                    </span>
+                    <span className="controls-match-title">
+                      {currentMatch.homeTeam} vs {currentMatch.awayTeam}
+                    </span>
+                  </div>
+
+                  {/* اليمين: ملء الشاشة والـ PIP */}
+                  <div className="controls-right">
+                    <button
+                      className="control-btn pip-btn"
+                      onClick={() => {
+                        const video = videoRef.current;
+                        if (!video) return;
+                        if (document.pictureInPictureElement) {
+                          document.exitPictureInPicture();
+                        } else if (video.requestPictureInPicture) {
+                          video.requestPictureInPicture();
+                        }
+                      }}
+                      aria-label="صورة داخل صورة"
+                    >
+                      📺
+                    </button>
+                    <button
+                      className="control-btn fullscreen-btn"
+                      onClick={handleFullscreenToggle}
+                      aria-label={
+                        isFullscreen ? "خروج من ملء الشاشة" : "ملء الشاشة"
+                      }
+                    >
+                      {isFullscreen ? "⏹" : "⛶"}
+                    </button>
                   </div>
                 </div>
-
-                {/* الوسط: اسم المباراة وبادج البث المباشر */}
-                <div className="controls-center">
-                  <span className="controls-live-badge">
-                    <span className="controls-live-dot" />
-                    مباشر
-                  </span>
-                  <span className="controls-match-title">
-                    {currentMatch.homeTeam} vs {currentMatch.awayTeam}
-                  </span>
-                </div>
-
-                {/* اليمين: ملء الشاشة والـ PIP */}
-                <div className="controls-right">
-                  <button
-                    className="control-btn pip-btn"
-                    onClick={() => {
-                      const video = videoRef.current;
-                      if (!video) return;
-                      if (document.pictureInPictureElement) {
-                        document.exitPictureInPicture();
-                      } else if (video.requestPictureInPicture) {
-                        video.requestPictureInPicture();
-                      }
-                    }}
-                    aria-label="صورة داخل صورة"
-                  >
-                    📺
-                  </button>
-                  <button
-                    className="control-btn fullscreen-btn"
-                    onClick={handleFullscreenToggle}
-                    aria-label={
-                      isFullscreen ? "خروج من ملء الشاشة" : "ملء الشاشة"
-                    }
-                  >
-                    {isFullscreen ? "⏹" : "⛶"}
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
           </div>
 
           {/* أزرار السيرفرات (Servers Selector) */}
