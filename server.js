@@ -2412,8 +2412,26 @@ app.get("/api/stream", async (req, res) => {
       const lines = text.split(/\r?\n/);
       const rewrittenLines = lines.map(line => {
         const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) {
-          return line;
+        if (!trimmed) return line;
+
+        let processedLine = line;
+        
+        // Rewrite URI attributes in HLS tags (like keys, audio, or I-frame lists)
+        if (processedLine.startsWith("#")) {
+          if (processedLine.includes("URI=")) {
+            processedLine = processedLine.replace(/URI="([^"]+)"/g, (match, urlValue) => {
+              let absoluteUrl = urlValue;
+              try {
+                absoluteUrl = new URL(urlValue, finalStreamUrl).href;
+              } catch (e) {}
+              
+              const host = req.headers.host;
+              const protocol = req.secure ? "https" : "http";
+              const proxiedUrl = `${protocol}://${host}/api/stream?url=${encodeURIComponent(absoluteUrl)}${finalReferer ? `&referer=${encodeURIComponent(finalReferer)}` : ""}`;
+              return `URI="${proxiedUrl}"`;
+            });
+          }
+          return processedLine;
         }
         
         let absoluteUrl = trimmed;
@@ -2533,7 +2551,7 @@ app.get("/api/media/stream", async (req, res) => {
       if (finalUrl.includes(".m3u8") || finalUrl.includes("urlset")) {
         console.log(`📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP/CORS lock: ${finalUrl}`);
         const protocol = req.secure ? "https" : "http";
-        finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}`;
+        finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}${targetUrl ? `&referer=${encodeURIComponent(targetUrl)}` : ""}`;
         finalType = "direct";
       }
       
@@ -2570,7 +2588,7 @@ app.get("/api/media/stream", async (req, res) => {
       if (finalUrl.includes(".m3u8") || finalUrl.includes("urlset")) {
         console.log(`📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP/CORS lock: ${finalUrl}`);
         const protocol = req.secure ? "https" : "http";
-        finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}`;
+        finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}${targetUrl ? `&referer=${encodeURIComponent(targetUrl)}` : ""}`;
         finalType = "direct";
       }
 
