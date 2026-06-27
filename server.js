@@ -2359,23 +2359,124 @@ app.get("/api/stream", async (req, res) => {
     }
   }
 
-  console.log(`📡 [Direct Stream] طلب تشغيل البث لـ: ${targetUrl}`);
+  console.log(`📡 [Direct Stream] Proxying stream for: ${targetUrl}`);
 
-  if (targetUrl.includes(".m3u8")) {
-    return startFfmpeg(targetUrl, res, req);
-  }
+  // Enable CORS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+
+  const referer = req.query.referer || "";
 
   try {
-    const result = await getOrSniffStream(targetUrl);
-    if (result && result.streamUrl) {
-      console.log(`🎯 [Direct Stream] بدء بث FFmpeg لـ: ${result.streamUrl}`);
-      return startFfmpeg(result.streamUrl, res, req, result.referer);
+    let finalStreamUrl = targetUrl;
+    let finalReferer = referer;
+
+    // If it's not a direct stream file, we might need to sniff it first
+    const isDirect = targetUrl.includes(".m3u8") || 
+                     targetUrl.includes(".mp4") || 
+                     targetUrl.includes(".ts") || 
+                     targetUrl.includes(".image") || 
+                     targetUrl.includes("urlset") || 
+                     targetUrl.includes("segment") || 
+                     targetUrl.includes("chunk") || 
+                     req.query.referer;
+
+    if (!isDirect) {
+      const result = await getOrSniffStream(targetUrl);
+      if (result && result.streamUrl) {
+        finalStreamUrl = result.streamUrl;
+        finalReferer = result.referer || referer;
+      } else {
+        return res.status(404).send("لم يتم العثور على إشارة بث حالية");
+      }
+    }
+
+    const parsedUrl = new URL(finalStreamUrl);
+    const isM3u8 = parsedUrl.pathname.endsWith(".m3u8") || finalStreamUrl.includes("urlset") || finalStreamUrl.includes(".m3u8");
+
+    const fetchHeaders = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    };
+    if (finalReferer) {
+      fetchHeaders["Referer"] = finalReferer;
+    }
+
+    if (isM3u8) {
+      console.log(`📡 [HLS Proxy] Fetching and parsing playlist: ${finalStreamUrl}`);
+      const response = await fetch(finalStreamUrl, { headers: fetchHeaders });
+      if (!response.ok) {
+        return res.status(response.status).send(`Failed to fetch playlist: ${response.statusText}`);
+      }
+      
+      const text = await response.text();
+      const lines = text.split(/\r?\n/);
+      const rewrittenLines = lines.map(line => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) {
+          return line;
+        }
+        
+        let absoluteUrl = trimmed;
+        try {
+          absoluteUrl = new URL(trimmed, finalStreamUrl).href;
+        } catch (e) {}
+
+        const host = req.headers.host;
+        const protocol = req.secure ? "https" : "http";
+        return `${protocol}://${host}/api/stream?url=${encodeURIComponent(absoluteUrl)}${finalReferer ? `&referer=${encodeURIComponent(finalReferer)}` : ""}`;
+      });
+
+      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+      return res.send(rewrittenLines.join("\n"));
     } else {
-      res.status(404).send("لم يتم العثور على إشارة بث حالية");
+      // Fetching segment silenty to avoid spamming the console
+      const response = await fetch(finalStreamUrl, { headers: fetchHeaders });
+      if (!response.ok) {
+        return res.status(response.status).send(`Failed to fetch segment: ${response.statusText}`);
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      const contentLengthStr = response.headers.get("content-length");
+      const contentLength = contentLengthStr ? parseInt(contentLengthStr, 10) : 0;
+
+      // Classify if it's a small chunk/segment vs large media file
+      const isSegment = finalStreamUrl.includes(".ts") || finalStreamUrl.includes(".image") || finalStreamUrl.includes("segment") || contentLength < 15 * 1024 * 1024;
+
+      if (!isSegment) {
+        console.log(`📡 [Segment Proxy] Piping large file directly (${contentLengthStr} bytes)`);
+        res.setHeader("Content-Type", contentType);
+        if (contentLengthStr) res.setHeader("Content-Length", contentLengthStr);
+        
+        const reader = response.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(Buffer.from(value));
+        }
+        res.end();
+        return;
+      }
+
+      // Read small segment to inspect and strip PNG header
+      const arrayBuffer = await response.arrayBuffer();
+      let buffer = Buffer.from(arrayBuffer);
+
+      if (buffer.length > 8 && buffer.slice(0, 8).toString("hex") === "89504e470d0a1a0a") {
+        const tsOffset = buffer.indexOf(0x47, 8);
+        if (tsOffset !== -1) {
+          buffer = buffer.slice(tsOffset);
+        }
+      }
+
+      res.setHeader("Content-Type", contentType || "video/mp2t");
+      res.setHeader("Content-Length", buffer.length);
+      return res.send(buffer);
     }
   } catch (err) {
-    console.error(`❌ Error in /api/stream:`, err.message);
-    res.status(500).send("حدث خطأ أثناء قنص البث");
+    console.error(`❌ Error in /api/stream proxy:`, err.stack || err.message);
+    if (!res.headersSent) {
+      res.status(500).send("حدث خطأ أثناء قنص البث");
+    }
   }
 });
 
@@ -2430,13 +2531,10 @@ app.get("/api/media/stream", async (req, res) => {
       let finalType = cached.type;
       
       if (finalUrl.includes(".m3u8") || finalUrl.includes("urlset")) {
-        const isLocalhost = req.headers.host && (req.headers.host.includes("localhost") || req.headers.host.includes("127.0.0.1"));
-        if (!isLocalhost) {
-          console.log(`📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP lock: ${finalUrl}`);
-          const protocol = req.secure ? "https" : "http";
-          finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}`;
-          finalType = "direct";
-        }
+        console.log(`📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP/CORS lock: ${finalUrl}`);
+        const protocol = req.secure ? "https" : "http";
+        finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}`;
+        finalType = "direct";
       }
       
       return res.json({ streamUrl: finalUrl, type: finalType });
@@ -2470,13 +2568,10 @@ app.get("/api/media/stream", async (req, res) => {
       let finalType = result.type;
       
       if (finalUrl.includes(".m3u8") || finalUrl.includes("urlset")) {
-        const isLocalhost = req.headers.host && (req.headers.host.includes("localhost") || req.headers.host.includes("127.0.0.1"));
-        if (!isLocalhost) {
-          console.log(`📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP lock: ${finalUrl}`);
-          const protocol = req.secure ? "https" : "http";
-          finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}`;
-          finalType = "direct";
-        }
+        console.log(`📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP/CORS lock: ${finalUrl}`);
+        const protocol = req.secure ? "https" : "http";
+        finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}`;
+        finalType = "direct";
       }
 
       return res.json({ streamUrl: finalUrl, type: finalType });
@@ -2503,6 +2598,11 @@ function startFfmpeg(url, res, req, referer) {
     );
     args.push("-referer", referer);
   }
+
+  // Whitelist all custom segment extensions (e.g. .image) and disable picky extension checks
+  args.push("-allowed_extensions", "ALL");
+  args.push("-allowed_segment_extensions", "ALL");
+  args.push("-extension_picky", "0");
 
   args.push("-i", url);
   args.push(

@@ -145,6 +145,9 @@ export default function HomePage() {
   const [volume, setVolume] = useState(0.5);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  const [streamUrl, setStreamUrl] = useState("");
+  const [streamType, setStreamType] = useState("direct");
+
 
   // ─── RTK Query ──────────────────────────────────────────────────────────
   const {
@@ -208,6 +211,8 @@ export default function HomePage() {
       setIsLoadingStream(true);
       setHasError(false);
       setActiveServerIndex(serverIndex);
+      setStreamUrl("");
+      setStreamType("direct");
 
       const video = videoRef.current;
       if (!video) return;
@@ -226,6 +231,15 @@ export default function HomePage() {
           const data = await response.json();
 
           if (data.streamUrl) {
+            setStreamUrl(data.streamUrl);
+            setStreamType(data.type || "direct");
+
+            if (data.type === "iframe") {
+              setIsLoadingStream(false);
+              setHasError(false);
+              return;
+            }
+
             const isHls =
               data.type === "direct" &&
               (data.streamUrl.includes(".m3u8") ||
@@ -272,8 +286,9 @@ export default function HomePage() {
         }
       }, 100);
     },
-    [destroyHls],
+    [destroyHls, setStreamUrl, setStreamType],
   );
+
 
   // ─── تشغيل مباراة ────────────────────────────────────────────────────────
   const handleWatchMatch = useCallback(
@@ -501,6 +516,25 @@ export default function HomePage() {
               </button>
             </div>
 
+            {/* مشغل الفيديو iframe */}
+            {currentMatch && !isLoadingStream && !hasError && streamType === "iframe" && streamUrl && (
+              <iframe
+                src={streamUrl}
+                className="w-full h-full aspect-video rounded-xl shadow-2xl"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "var(--radius-xl)",
+                  background: "#000",
+                }}
+                allowFullScreen
+                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+                referrerPolicy="no-referrer"
+              />
+            )}
+
             {/* ─── عنصر الفيديو الرئيسي (HTML5 Video) ─────────────── */}
             <video
               ref={videoRef}
@@ -509,6 +543,7 @@ export default function HomePage() {
               muted
               playsInline
               preload="none"
+              style={{ display: streamType === "iframe" ? "none" : undefined }}
               title={
                 currentMatch
                   ? `${currentMatch.homeTeam} vs ${currentMatch.awayTeam}`
@@ -530,7 +565,7 @@ export default function HomePage() {
             />
 
             {/* زر تشغيل مركزي مخصص عند الإيقاف المؤقت */}
-            {currentMatch && !isLoadingStream && !hasError && !isPlaying && (
+            {currentMatch && !isLoadingStream && !hasError && !isPlaying && streamType !== "iframe" && (
               <button
                 className="video-center-btn"
                 onClick={handlePlayPause}
@@ -541,7 +576,7 @@ export default function HomePage() {
             )}
 
             {/* شريط التحكم المخصص السفلي */}
-            {currentMatch && !isLoadingStream && !hasError && (
+            {currentMatch && !isLoadingStream && !hasError && streamType !== "iframe" && (
               <div
                 className={`video-controls-bar ${showControls ? "visible" : ""}`}
               >
