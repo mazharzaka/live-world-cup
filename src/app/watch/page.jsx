@@ -78,7 +78,10 @@ function DirectVideoPlayer({ src }) {
         player.currentTime = Math.max(0, player.currentTime - 5);
       } else if (code === "ArrowRight" || key === "arrowright") {
         e.preventDefault();
-        player.currentTime = Math.min(player.duration || 0, player.currentTime + 5);
+        player.currentTime = Math.min(
+          player.duration || 0,
+          player.currentTime + 5,
+        );
       } else if (code === "ArrowUp" || key === "arrowup") {
         e.preventDefault();
         player.volume = Math.min(1, player.volume + 0.05);
@@ -98,17 +101,26 @@ function DirectVideoPlayer({ src }) {
 
     const initPlayer = async () => {
       const Hls = (await import("hls.js")).default;
-      
+
       const setupPlyr = () => {
         plyrPlayer = new window.Plyr(video, {
           controls: [
-            'play-large', 'play', 'progress', 'current-time', 
-            'duration', 'mute', 'volume', 'captions', 
-            'settings', 'pip', 'airplay', 'fullscreen'
+            "play-large",
+            "play",
+            "progress",
+            "current-time",
+            "duration",
+            "mute",
+            "volume",
+            "captions",
+            "settings",
+            "pip",
+            "airplay",
+            "fullscreen",
           ],
-          settings: ['captions', 'quality', 'speed', 'loop'],
+          settings: ["captions", "quality", "speed", "loop"],
           keyboard: { focused: true, global: false },
-          seekTime: 5
+          seekTime: 5,
         });
         playerRef.current = plyrPlayer;
       };
@@ -148,7 +160,10 @@ function DirectVideoPlayer({ src }) {
   }, [src, plyrLoaded]);
 
   return (
-    <div className="plyr-wrapper w-full h-full rounded-xl overflow-hidden shadow-2xl" style={{ width: "100%", height: "100%", background: "#000" }}>
+    <div
+      className="plyr-wrapper w-full h-full rounded-xl overflow-hidden shadow-2xl"
+      style={{ width: "100%", height: "100%", background: "#000" }}
+    >
       <video
         ref={videoRef}
         className="plyr-video w-full h-full"
@@ -159,7 +174,6 @@ function DirectVideoPlayer({ src }) {
     </div>
   );
 }
-
 
 function WatchContent() {
   const searchParams = useSearchParams();
@@ -345,7 +359,16 @@ function WatchContent() {
       </div>
 
       {/* عنوان الفيلم وتفاصيل إضافية */}
-      <div className="watch-title-area" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
+      <div
+        className="watch-title-area"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "16px",
+        }}
+      >
         <div>
           <h1 className="watch-movie-title">{title}</h1>
           <p
@@ -377,7 +400,7 @@ function WatchContent() {
             fontSize: "14px",
             fontWeight: "500",
             transition: "all 0.2s",
-            outline: "none"
+            outline: "none",
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)";

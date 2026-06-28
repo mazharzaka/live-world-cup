@@ -9,7 +9,8 @@ const Match = require("./src/models/Match");
 const MONGODB_URI =
   process.env.MONGODB_URI || "mongodb://localhost:27017/stream-hunter";
 mongoose.set("bufferCommands", false); // Disable command buffering so disconnected queries fail fast instead of hanging
-const dbConnectPromise = mongoose.connect(MONGODB_URI)
+const dbConnectPromise = mongoose
+  .connect(MONGODB_URI)
   .then(() => {
     console.log("🔌 Connected to MongoDB Successfully!");
   })
@@ -147,22 +148,22 @@ async function launchBrowser() {
     "--disable-setuid-sandbox",
 
     // ── RAM & CPU savings ──
-    '--disable-dev-shm-usage',        // use /tmp instead of /dev/shm (critical on Render)
-    '--disable-gpu',                   // no GPU needed in headless
-    '--disable-accelerated-2d-canvas', // remove canvas GPU layer
-    '--no-zygote',                     // skip zygote process (saves ~30 MB)
-    '--disable-extensions',            // no extensions
-    '--disable-background-networking', // no background HTTP calls
-    '--disable-background-timer-throttling',
-    '--disable-backgrounding-occluded-windows',
-    '--disable-renderer-backgrounding',
-    '--disable-features=TranslateUI,BlinkGenPropertyTrees,ImprovedCookieControls,LazyFrameLoading',
-    '--disable-ipc-flooding-protection',
-    '--disable-notifications',
-    '--disable-sync',
-    '--no-first-run',
-    '--metrics-recording-only',
-    '--mute-audio',
+    "--disable-dev-shm-usage", // use /tmp instead of /dev/shm (critical on Render)
+    "--disable-gpu", // no GPU needed in headless
+    "--disable-accelerated-2d-canvas", // remove canvas GPU layer
+    "--no-zygote", // skip zygote process (saves ~30 MB)
+    "--disable-extensions", // no extensions
+    "--disable-background-networking", // no background HTTP calls
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+    "--disable-features=TranslateUI,BlinkGenPropertyTrees,ImprovedCookieControls,LazyFrameLoading",
+    "--disable-ipc-flooding-protection",
+    "--disable-notifications",
+    "--disable-sync",
+    "--no-first-run",
+    "--metrics-recording-only",
+    "--mute-audio",
 
     // ── Network / SSL ──
     "--ignore-certificate-errors",
@@ -301,12 +302,11 @@ async function movieSniffer() {
       fallbackBase:
         "https://vid.mycima.cc/categories-cimawbas.php?cat=5-cimawbas-aflam-3arby",
     },
-      {
+    {
       type: "direct_menu_site",
       source: "egydead",
       searchKey: "ايجى ديد",
-      fallbackBase:
-        "https://tv9.egydead.live/",
+      fallbackBase: "https://tv9.egydead.live/",
     },
     // {
     //   type: "google_search",
@@ -320,61 +320,183 @@ async function movieSniffer() {
 
   try {
     for (const task of tasks) {
-        console.log(
-          `🚀 [Ultimate Scraper] Opening new page for task: ${task.source}`,
-        );
-        const page = await browser.newPage();
-        await page.setViewport({ width: 1366, height: 768 });
-        await configurePage(page);
-        await blockPageResources(page); // 💾 Block images/CSS/fonts to save RAM
-        console.log(
-          `🚀 [Ultimate Scraper] Page configured + resources blocked for: ${task.source}`,
-        );
+      console.log(
+        `🚀 [Ultimate Scraper] Opening new page for task: ${task.source}`,
+      );
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1366, height: 768 });
+      await configurePage(page);
+      await blockPageResources(page); // 💾 Block images/CSS/fonts to save RAM
+      console.log(
+        `🚀 [Ultimate Scraper] Page configured + resources blocked for: ${task.source}`,
+      );
 
-        // 👑 المسار الأول: توب سينما للأجنبي بالمنيو الديناميكي (شغال الله ينور)
-        if (task.type === "direct_menu_site") {
-          try {
-            console.log(
-              `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قنص النطاق الحي من جوجل...`,
-            );
-            console.log(
-              `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to Google search...`,
-            );
-            await page.goto(
-              `https://www.google.com/search?q=${encodeURIComponent(task.searchKey)}`,
-              { waitUntil: "domcontentloaded", timeout: 30000 },
-            );
-            console.log(
-              `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Google search page loaded.`,
+      // 👑 المسار الأول: توب سينما للأجنبي بالمنيو الديناميكي (شغال الله ينور)
+      if (task.type === "direct_menu_site") {
+        try {
+          console.log(
+            `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] جاري قنص النطاق الحي من جوجل...`,
+          );
+          console.log(
+            `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to Google search...`,
+          );
+          await page.goto(
+            `https://www.google.com/search?q=${encodeURIComponent(task.searchKey)}`,
+            { waitUntil: "domcontentloaded", timeout: 30000 },
+          );
+          console.log(
+            `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Google search page loaded.`,
+          );
+
+          let baseUrl = await page.evaluate((key) => {
+            const searchLinks = document.querySelectorAll("#search a");
+            for (let a of searchLinks) {
+              const href = a.href ? a.href.toLowerCase() : "";
+              if (
+                href &&
+                (href.includes(key) ||
+                  href.includes("arabseed") ||
+                  href.includes("asd")) &&
+                !href.includes("google")
+              )
+                return new URL(a.href).origin;
+            }
+            return null;
+          }, task.source);
+
+          baseUrl = baseUrl || task.fallbackBase;
+          const isCategoryPage =
+            baseUrl.includes("/category/") ||
+            baseUrl.includes("/list/") ||
+            baseUrl.includes("categories-cimawbas") ||
+            baseUrl.includes("aflam-3arby");
+
+          console.log(
+            `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to base URL: ${baseUrl}`,
+          );
+          await page.goto(baseUrl, {
+            waitUntil: "domcontentloaded",
+            timeout: 30000,
+          });
+          console.log("📄 Page Title:", await page.title());
+          console.log("🌐 Current URL:", page.url());
+          const bodyHTML = await page.evaluate(() =>
+            document.body ? document.body.innerHTML : "",
+          );
+          console.log(
+            "🔍 First 500 chars of HTML:",
+            bodyHTML.substring(0, 500),
+          );
+          console.log(
+            `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Base URL loaded. Waiting 2 seconds...`,
+          );
+          await new Promise((r) => setTimeout(r, 2000));
+
+          const mappedSections = await page.evaluate(() => {
+            const sectionsFound = {};
+            const navLinks = document.querySelectorAll(
+              "nav a, .menu a, header a, ul li a, .navbar a, .slideMenu a, #pushList a",
             );
 
-            let baseUrl = await page.evaluate((key) => {
-              const searchLinks = document.querySelectorAll("#search a");
-              for (let a of searchLinks) {
-                const href = a.href ? a.href.toLowerCase() : "";
-                if (
-                  href &&
-                  (href.includes(key) ||
-                    href.includes("arabseed") ||
-                    href.includes("asd")) &&
-                  !href.includes("google")
-                )
-                  return new URL(a.href).origin;
+            navLinks.forEach((a) => {
+              const text = (a.textContent || a.innerText || "")
+                .toLowerCase()
+                .trim();
+              const href = a.href;
+              if (
+                !href ||
+                !href.startsWith("http") ||
+                href === window.location.href ||
+                (!href.includes("/category/") &&
+                  !href.includes("/movies/") &&
+                  !href.includes("/series/") &&
+                  !href.includes("/series-category/"))
+              )
+                return;
+
+              const cleanText = text
+                .replace(/أ/g, "ا")
+                .replace(/إ/g, "ا")
+                .replace(/آ/g, "ا")
+                .replace(/ة/g, "ه")
+                .replace(/ى/g, "ي")
+                .replace(/ال/g, "");
+
+              const hasMovies =
+                cleanText.includes("فيلم") || cleanText.includes("افلام");
+              const hasSeries =
+                cleanText.includes("مسلسل") || cleanText.includes("مسلسلات");
+              const isForeign =
+                cleanText.includes("اجني") ||
+                cleanText.includes("اجنبي") ||
+                cleanText.includes("اجنبيه") ||
+                cleanText.includes("انقليزي") ||
+                cleanText.includes("انجليزي");
+              const isArabic =
+                cleanText.includes("عربي") ||
+                cleanText.includes("مصرى") ||
+                cleanText.includes("مصريه") ||
+                cleanText.includes("خليجي") ||
+                cleanText.includes("سوري") ||
+                cleanText.includes("لبناني");
+
+              const isDubbed =
+                cleanText.includes("مدبلج") ||
+                cleanText.includes("مدبلجه") ||
+                href.includes("dubbed") ||
+                href.includes("%d9%85%d8%af%d8%a8%d9%84%d8%ac");
+              const isCartoon =
+                cleanText.includes("كرتون") ||
+                cleanText.includes("انمي") ||
+                cleanText.includes("ديزني") ||
+                href.includes("cartoon") ||
+                href.includes("anime") ||
+                href.includes("%d9%83%d8%b1%d8%aa%d9%88%d9%86") ||
+                href.includes("%d8%a7%d9%86%d9%85%d9%8a");
+
+              if (hasMovies) {
+                if (isForeign && !isDubbed && !isCartoon)
+                  sectionsFound["englishMovies"] = href;
+                else if (isArabic && !isCartoon)
+                  sectionsFound["arabicMovies"] = href;
+              } else if (hasSeries) {
+                if (isForeign && !isDubbed && !isCartoon)
+                  sectionsFound["englishSeries"] = href;
+                else if (isArabic && !isCartoon)
+                  sectionsFound["arabicSeries"] = href;
               }
-              return null;
-            }, task.source);
+            });
+            return sectionsFound;
+          });
 
-            baseUrl = baseUrl || task.fallbackBase;
-            const isCategoryPage =
-              baseUrl.includes("/category/") ||
-              baseUrl.includes("/list/") ||
-              baseUrl.includes("categories-cimawbas") ||
-              baseUrl.includes("aflam-3arby");
+          if (isCategoryPage || Object.keys(mappedSections).length === 0) {
+            if (
+              task.fallbackBase.includes("category/arabic-movies") ||
+              task.fallbackBase.includes("arabic-movies") ||
+              task.fallbackBase.includes("aflam-3arby")
+            ) {
+              if (!mappedSections["arabicMovies"]) {
+                mappedSections["arabicMovies"] = baseUrl;
+              }
+            } else if (
+              task.fallbackBase.includes("category/arabic-series") ||
+              task.fallbackBase.includes("arabic-series")
+            ) {
+              if (!mappedSections["arabicSeries"]) {
+                mappedSections["arabicSeries"] = baseUrl;
+              }
+            }
+          }
 
+          for (let key in mappedSections) {
+            const sectionUrl = mappedSections[key];
             console.log(
-              `📡 [${task.source === "topcinema" ? "توب سينما" : "عرب سيد"}] Navigating to base URL: ${baseUrl}`,
+              `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] جاري قشط القسم [${key}] من الرابط: ${sectionUrl}`,
             );
-            await page.goto(baseUrl, {
+            console.log(
+              `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Navigating to section URL: ${sectionUrl}`,
+            );
+            await page.goto(sectionUrl, {
               waitUntil: "domcontentloaded",
               timeout: 30000,
             });
@@ -388,378 +510,283 @@ async function movieSniffer() {
               bodyHTML.substring(0, 500),
             );
             console.log(
-              `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Base URL loaded. Waiting 2 seconds...`,
+              `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Section URL loaded. Scrolling...`,
             );
-            await new Promise((r) => setTimeout(r, 2000));
 
-            const mappedSections = await page.evaluate(() => {
-              const sectionsFound = {};
-              const navLinks = document.querySelectorAll(
-                "nav a, .menu a, header a, ul li a, .navbar a, .slideMenu a, #pushList a",
+            await page.evaluate(async () => {
+              for (let i = 0; i < 5; i++) {
+                window.scrollBy(0, 600);
+                await new Promise((r) => setTimeout(r, 400));
+              }
+            });
+
+            const extracted = await page.evaluate(() => {
+              const items = [];
+              const cards = document.querySelectorAll(
+                '.Small--Box, [class*="movie"], [class*="card"], a',
               );
 
-              navLinks.forEach((a) => {
-                const text = (a.textContent || a.innerText || "").toLowerCase().trim();
-                const href = a.href;
+              cards.forEach((card) => {
+                let href = card.href || card.querySelector("a")?.href;
                 if (
                   !href ||
                   !href.startsWith("http") ||
-                  href === window.location.href ||
-                  (!href.includes("/category/") &&
-                    !href.includes("/movies/") &&
-                    !href.includes("/series/") &&
-                    !href.includes("/series-category/"))
+                  href.includes("twitter.com") ||
+                  href.includes("x.com") ||
+                  href.includes("youtube.com") ||
+                  href.includes("facebook.com") ||
+                  href.includes("instagram.com") ||
+                  href.includes("t.me") ||
+                  href.includes("telegram") ||
+                  href.includes("/category/") ||
+                  href.includes("/actor/") ||
+                  href.includes("/genre/") ||
+                  href.includes("/year/") ||
+                  href.includes("/tag/") ||
+                  href.includes("/tags/") ||
+                  href.includes("rgetUrl") ||
+                  href.includes("url=")
                 )
                   return;
 
-                const cleanText = text
-                  .replace(/أ/g, "ا")
-                  .replace(/إ/g, "ا")
-                  .replace(/آ/g, "ا")
-                  .replace(/ة/g, "ه")
-                  .replace(/ى/g, "ي")
-                  .replace(/ال/g, "");
+                let posterUrl = "";
 
-                const hasMovies =
-                  cleanText.includes("فيلم") || cleanText.includes("افلام");
-                const hasSeries =
-                  cleanText.includes("مسلسل") || cleanText.includes("مسلسلات");
-                const isForeign =
-                  cleanText.includes("اجني") ||
-                  cleanText.includes("اجنبي") ||
-                  cleanText.includes("اجنبيه") ||
-                  cleanText.includes("انقليزي") ||
-                  cleanText.includes("انجليزي");
-                const isArabic =
-                  cleanText.includes("عربي") ||
-                  cleanText.includes("مصرى") ||
-                  cleanText.includes("مصريه") ||
-                  cleanText.includes("خليجي") ||
-                  cleanText.includes("سوري") ||
-                  cleanText.includes("لبناني");
+                const imgEl =
+                  card.tagName === "IMG" ? card : card.querySelector("img");
+                if (imgEl) {
+                  posterUrl =
+                    imgEl.getAttribute("data-src") ||
+                    imgEl.getAttribute("data-lazy-src") ||
+                    imgEl.getAttribute("data-echo") ||
+                    imgEl.getAttribute("data-lazy-style") ||
+                    imgEl.src;
+                }
 
-                const isDubbed = cleanText.includes("مدبلج") || cleanText.includes("مدبلجه") || href.includes("dubbed") || href.includes("%d9%85%d8%af%d8%a8%d9%84%d8%ac");
-                const isCartoon = cleanText.includes("كرتون") || cleanText.includes("انمي") || cleanText.includes("ديزني") || href.includes("cartoon") || href.includes("anime") || href.includes("%d9%83%d8%b1%d8%aa%d9%88%d9%86") || href.includes("%d8%a7%d9%86%d9%85%d9%8a");
+                if (!posterUrl || posterUrl.includes("melody-lzld")) {
+                  const bgSpan = card.querySelector(
+                    '[data-lazy-style], [style*="background-image"]',
+                  );
+                  if (bgSpan) {
+                    const styleStr =
+                      bgSpan.getAttribute("data-lazy-style") ||
+                      bgSpan.getAttribute("style");
+                    const match = styleStr.match(/url\(['"]?(.*?)['"]?\)/);
+                    if (match && match[1]) {
+                      posterUrl = match[1];
+                    }
+                  }
+                }
 
-                if (hasMovies) {
-                  if (isForeign && !isDubbed && !isCartoon) sectionsFound["englishMovies"] = href;
-                  else if (isArabic && !isCartoon) sectionsFound["arabicMovies"] = href;
-                } else if (hasSeries) {
-                  if (isForeign && !isDubbed && !isCartoon) sectionsFound["englishSeries"] = href;
-                  else if (isArabic && !isCartoon) sectionsFound["arabicSeries"] = href;
+                if (!posterUrl || posterUrl.includes("melody-lzld")) {
+                  const allLazy = card.querySelectorAll(
+                    "[data-lazy-src], [data-src], [data-echo]",
+                  );
+                  for (let el of allLazy) {
+                    const src =
+                      el.getAttribute("data-lazy-src") ||
+                      el.getAttribute("data-src") ||
+                      el.getAttribute("data-echo");
+                    if (src && !src.includes("melody-lzld")) {
+                      posterUrl = src;
+                      break;
+                    }
+                  }
+                }
+
+                if (posterUrl && posterUrl.includes("melody-lzld")) {
+                  // Don't drop it, just use a fallback or keep it so we don't lose the movie!
+                  posterUrl =
+                    "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
+                }
+
+                if (
+                  !posterUrl ||
+                  posterUrl.includes("logo") ||
+                  posterUrl.includes("blank") ||
+                  posterUrl.includes("cover.jpg")
+                )
+                  return;
+
+                const titleEl =
+                  card.querySelector("h3") || card.querySelector(".title");
+                let titleText = titleEl
+                  ? titleEl.innerText.trim()
+                  : imgEl
+                    ? (imgEl.getAttribute("alt") || imgEl.alt || "").trim()
+                    : "";
+
+                if (!titleText || titleText.length < 2) {
+                  titleText = (card.innerText || card.textContent || "")
+                    .split("\n")[0]
+                    .trim();
+                }
+
+                if (titleText && titleText.length > 2) {
+                  if (!items.some((item) => item.link === href))
+                    items.push({
+                      title: titleText,
+                      poster: posterUrl,
+                      link: href,
+                    });
                 }
               });
-              return sectionsFound;
+              return items;
             });
+            console.log(
+              `🔍 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Element selection results count: ${extracted.length}`,
+            );
 
-            if (isCategoryPage || Object.keys(mappedSections).length === 0) {
+            extracted.forEach((item) => {
+              let cleanTitle = item.title
+                .replace(/مشاهدة/g, "")
+                .replace(/فيلم/g, "")
+                .replace(/مسلسل/g, "")
+                .replace(/مترجم/g, "")
+                .replace(/اون لاين/g, "")
+                .trim();
+              let targetLink = item.link;
               if (
-                task.fallbackBase.includes("category/arabic-movies") ||
-                task.fallbackBase.includes("arabic-movies") ||
-                task.fallbackBase.includes("aflam-3arby")
+                targetLink.includes("mycima") &&
+                targetLink.includes("watch.php")
               ) {
-                if (!mappedSections["arabicMovies"]) {
-                  mappedSections["arabicMovies"] = baseUrl;
-                }
-              } else if (
-                task.fallbackBase.includes("category/arabic-series") ||
-                task.fallbackBase.includes("arabic-series")
-              ) {
-                if (!mappedSections["arabicSeries"]) {
-                  mappedSections["arabicSeries"] = baseUrl;
-                }
+                targetLink = targetLink.replace("watch.php", "play.php");
               }
-            }
-
-            for (let key in mappedSections) {
-              const sectionUrl = mappedSections[key];
-              console.log(
-                `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] جاري قشط القسم [${key}] من الرابط: ${sectionUrl}`,
-              );
-              console.log(
-                `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Navigating to section URL: ${sectionUrl}`,
-              );
-              await page.goto(sectionUrl, {
-                waitUntil: "domcontentloaded",
-                timeout: 30000,
-              });
-              console.log("📄 Page Title:", await page.title());
-              console.log("🌐 Current URL:", page.url());
-              const bodyHTML = await page.evaluate(() =>
-                document.body ? document.body.innerHTML : "",
-              );
-              console.log(
-                "🔍 First 500 chars of HTML:",
-                bodyHTML.substring(0, 500),
-              );
-              console.log(
-                `📡 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Section URL loaded. Scrolling...`,
-              );
-
-              await page.evaluate(async () => {
-                for (let i = 0; i < 5; i++) {
-                  window.scrollBy(0, 600);
-                  await new Promise((r) => setTimeout(r, 400));
-                }
-              });
-
-              const extracted = await page.evaluate(() => {
-                const items = [];
-                const cards = document.querySelectorAll(
-                  '.Small--Box, [class*="movie"], [class*="card"], a',
-                );
-
-                cards.forEach((card) => {
-                  let href = card.href || card.querySelector("a")?.href;
-                  if (
-                    !href ||
-                    !href.startsWith("http") ||
-                    href.includes("twitter.com") ||
-                    href.includes("x.com") ||
-                    href.includes("youtube.com") ||
-                    href.includes("facebook.com") ||
-                    href.includes("instagram.com") ||
-                    href.includes("t.me") ||
-                    href.includes("telegram") ||
-                    href.includes("/category/") ||
-                    href.includes("/actor/") ||
-                    href.includes("/genre/") ||
-                    href.includes("/year/") ||
-                    href.includes("/tag/") ||
-                    href.includes("/tags/") ||
-                    href.includes("rgetUrl") ||
-                    href.includes("url=")
-                  )
-                    return;
-
-                  let posterUrl = "";
-
-                  const imgEl =
-                    card.tagName === "IMG" ? card : card.querySelector("img");
-                  if (imgEl) {
-                    posterUrl =
-                      imgEl.getAttribute("data-src") ||
-                      imgEl.getAttribute("data-lazy-src") ||
-                      imgEl.getAttribute("data-echo") ||
-                      imgEl.getAttribute("data-lazy-style") ||
-                      imgEl.src;
-                  }
-
-                  if (!posterUrl || posterUrl.includes("melody-lzld")) {
-                    const bgSpan = card.querySelector(
-                      '[data-lazy-style], [style*="background-image"]',
-                    );
-                    if (bgSpan) {
-                      const styleStr =
-                        bgSpan.getAttribute("data-lazy-style") ||
-                        bgSpan.getAttribute("style");
-                      const match = styleStr.match(/url\(['"]?(.*?)['"]?\)/);
-                      if (match && match[1]) {
-                        posterUrl = match[1];
-                      }
-                    }
-                  }
-
-                  if (!posterUrl || posterUrl.includes("melody-lzld")) {
-                    const allLazy = card.querySelectorAll(
-                      "[data-lazy-src], [data-src], [data-echo]",
-                    );
-                    for (let el of allLazy) {
-                      const src =
-                        el.getAttribute("data-lazy-src") ||
-                        el.getAttribute("data-src") ||
-                        el.getAttribute("data-echo");
-                      if (src && !src.includes("melody-lzld")) {
-                        posterUrl = src;
-                        break;
-                      }
-                    }
-                  }
-
-                  if (posterUrl && posterUrl.includes("melody-lzld")) {
-                    // Don't drop it, just use a fallback or keep it so we don't lose the movie!
-                    posterUrl =
-                      "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
-                  }
-
-                  if (
-                    !posterUrl ||
-                    posterUrl.includes("logo") ||
-                    posterUrl.includes("blank") ||
-                    posterUrl.includes("cover.jpg")
-                  )
-                    return;
-
-                  const titleEl =
-                    card.querySelector("h3") || card.querySelector(".title");
-                  let titleText = titleEl
-                    ? titleEl.innerText.trim()
-                    : (imgEl ? (imgEl.getAttribute("alt") || imgEl.alt || "").trim() : "");
-
-                  if (!titleText || titleText.length < 2) {
-                    titleText = (card.innerText || card.textContent || "").split('\n')[0].trim();
-                  }
-
-                  if (titleText && titleText.length > 2) {
-                    if (!items.some((item) => item.link === href))
-                      items.push({
-                        title: titleText,
-                        poster: posterUrl,
-                        link: href,
-                      });
-                  }
+              if (
+                !tempScrapedData[key].some((el) => el.targetUrl === targetLink)
+              ) {
+                tempScrapedData[key].push({
+                  id: `${key}-${Math.random().toString(36).substr(2, 5)}`,
+                  title: cleanTitle,
+                  poster: item.poster,
+                  targetUrl: targetLink,
                 });
-                return items;
-              });
-              console.log(
-                `🔍 [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] Element selection results count: ${extracted.length}`,
-              );
-
-              extracted.forEach((item) => {
-                let cleanTitle = item.title
-                  .replace(/مشاهدة/g, "")
-                  .replace(/فيلم/g, "")
-                  .replace(/مسلسل/g, "")
-                  .replace(/مترجم/g, "")
-                  .replace(/اون لاين/g, "")
-                  .trim();
-                let targetLink = item.link;
-                if (
-                  targetLink.includes("mycima") &&
-                  targetLink.includes("watch.php")
-                ) {
-                  targetLink = targetLink.replace("watch.php", "play.php");
-                }
-                if (
-                  !tempScrapedData[key].some((el) => el.targetUrl === targetLink)
-                ) {
-                  tempScrapedData[key].push({
-                    id: `${key}-${Math.random().toString(36).substr(2, 5)}`,
-                    title: cleanTitle,
-                    poster: item.poster,
-                    targetUrl: targetLink,
-                  });
-                }
-              });
-              console.log(
-                `✅ [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] لقطنا ${tempScrapedData[key].length} عنوان في حقل [${key}]`,
-              );
-            }
-          } catch (err) {
-            console.log(`❌ فشل في ${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}:`, err.message);
-          } finally {
-            try {
-              await page.close();
-            } catch (e) {
-              console.log(`⚠️ فشل إغلاق الصفحة (${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}):`, e.message);
-            }
+              }
+            });
+            console.log(
+              `✅ [${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}] لقطنا ${tempScrapedData[key].length} عنوان في حقل [${key}]`,
+            );
           }
-        }
-
-        // 👑 المسار الثاني: جوجل المفتوح والمصحح بالكامل للأفلام والمسلسلات العربي
-        if (task.type === "google_search") {
+        } catch (err) {
+          console.log(
+            `❌ فشل في ${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}:`,
+            err.message,
+          );
+        } finally {
           try {
-            for (let key in task.queries) {
-              console.log(
-                `🔍 [جوجل عربي] جاري صيد المحتوى العربي عبر البحث عن: [${task.queries[key]}]...`,
-              );
-              await page.goto(
-                `https://www.google.com/search?q=${encodeURIComponent(task.queries[key])}`,
-                { waitUntil: "domcontentloaded" },
-              );
-              console.log("📄 Google Search Page Title:", await page.title());
-              console.log("🌐 Google Search Current URL:", page.url());
-              const bodyHTML = await page.evaluate(() =>
-                document.body ? document.body.innerHTML : "",
-              );
-              console.log(
-                "🔍 First 500 chars of Google Search HTML:",
-                bodyHTML.substring(0, 500),
-              );
-
-              // 🔥 تصليح الفلترة: قشط نتايج جوجل بدون شروط استبعاد تسبب الأصفار
-              const results = await page.evaluate(() => {
-                const items = [];
-                // لقط روابط البحث العضوية من جوجل الصريحة
-                const searchLinks =
-                  document.querySelectorAll("#search a[jsname]");
-
-                searchLinks.forEach((link) => {
-                  const href = link.href;
-                  const titleEl = link.querySelector("h3");
-                  if (!href || !titleEl) return;
-
-                  // تصفية روابط جوجل الداخلية فقط
-                  if (
-                    href.includes("google.com") ||
-                    href.includes("wikipedia") ||
-                    href.includes("youtube.com")
-                  )
-                    return;
-
-                  let titleText = titleEl.innerText.trim();
-                  // بوستر افتراضي أنيق للمحتوى العربي
-                  const defaultPoster =
-                    "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400";
-
-                  if (titleText && titleText.length > 5) {
-                    // منع التكرار داخل اللفة الحالية
-                    if (!items.some((item) => item.link === href)) {
-                      items.push({
-                        title: titleText,
-                        poster: defaultPoster,
-                        link: href,
-                      });
-                    }
-                  }
-                });
-                return items;
-              });
-              console.log(
-                `🔍 [جوجل عربي] Extracted results count from search: ${results.length}`,
-              );
-
-              results.forEach((item) => {
-                // تنظيف العناوين الطويلة لتظهر كأسماء أفلام شيك في الـ UI
-                let cleanTitle = item.title
-                  .replace(/مشاهدة/g, "")
-                  .replace(/فيلم/g, "")
-                  .replace(/مسلسل/g, "")
-                  .replace(/اون لاين/g, "")
-                  .replace(/HD/g, "")
-                  .replace(/تحميل/g, "")
-                  .replace(/موقع/g, "")
-                  .replace(/حصري/g, "")
-                  .replace(/كامل/g, "")
-                  .split("-")[0]
-                  .split("|")[0]
-                  .trim();
-
-                if (
-                  !tempScrapedData[key].some((el) => el.targetUrl === item.link)
-                ) {
-                  tempScrapedData[key].push({
-                    id: `${key}-${Math.random().toString(36).substr(2, 5)}`,
-                    title: cleanTitle,
-                    poster: item.poster,
-                    targetUrl: item.link,
-                  });
-                }
-              });
-              console.log(
-                `✅ [جوجل عربي] لقطنا بنجاح ${tempScrapedData[key].length} عنوان عربي في حقل [${key}]`,
-              );
-            }
-          } catch (err) {
-            console.log("❌ فشل صيد العربي من جوجل:", err.message);
-          } finally {
-            try {
-              await page.close();
-            } catch (e) {
-              console.log("⚠️ فشل إغلاق الصفحة (جوجل عربي):", e.message);
-            }
+            await page.close();
+          } catch (e) {
+            console.log(
+              `⚠️ فشل إغلاق الصفحة (${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}):`,
+              e.message,
+            );
           }
         }
+      }
+
+      // 👑 المسار الثاني: جوجل المفتوح والمصحح بالكامل للأفلام والمسلسلات العربي
+      if (task.type === "google_search") {
+        try {
+          for (let key in task.queries) {
+            console.log(
+              `🔍 [جوجل عربي] جاري صيد المحتوى العربي عبر البحث عن: [${task.queries[key]}]...`,
+            );
+            await page.goto(
+              `https://www.google.com/search?q=${encodeURIComponent(task.queries[key])}`,
+              { waitUntil: "domcontentloaded" },
+            );
+            console.log("📄 Google Search Page Title:", await page.title());
+            console.log("🌐 Google Search Current URL:", page.url());
+            const bodyHTML = await page.evaluate(() =>
+              document.body ? document.body.innerHTML : "",
+            );
+            console.log(
+              "🔍 First 500 chars of Google Search HTML:",
+              bodyHTML.substring(0, 500),
+            );
+
+            // 🔥 تصليح الفلترة: قشط نتايج جوجل بدون شروط استبعاد تسبب الأصفار
+            const results = await page.evaluate(() => {
+              const items = [];
+              // لقط روابط البحث العضوية من جوجل الصريحة
+              const searchLinks =
+                document.querySelectorAll("#search a[jsname]");
+
+              searchLinks.forEach((link) => {
+                const href = link.href;
+                const titleEl = link.querySelector("h3");
+                if (!href || !titleEl) return;
+
+                // تصفية روابط جوجل الداخلية فقط
+                if (
+                  href.includes("google.com") ||
+                  href.includes("wikipedia") ||
+                  href.includes("youtube.com")
+                )
+                  return;
+
+                let titleText = titleEl.innerText.trim();
+                // بوستر افتراضي أنيق للمحتوى العربي
+                const defaultPoster =
+                  "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400";
+
+                if (titleText && titleText.length > 5) {
+                  // منع التكرار داخل اللفة الحالية
+                  if (!items.some((item) => item.link === href)) {
+                    items.push({
+                      title: titleText,
+                      poster: defaultPoster,
+                      link: href,
+                    });
+                  }
+                }
+              });
+              return items;
+            });
+            console.log(
+              `🔍 [جوجل عربي] Extracted results count from search: ${results.length}`,
+            );
+
+            results.forEach((item) => {
+              // تنظيف العناوين الطويلة لتظهر كأسماء أفلام شيك في الـ UI
+              let cleanTitle = item.title
+                .replace(/مشاهدة/g, "")
+                .replace(/فيلم/g, "")
+                .replace(/مسلسل/g, "")
+                .replace(/اون لاين/g, "")
+                .replace(/HD/g, "")
+                .replace(/تحميل/g, "")
+                .replace(/موقع/g, "")
+                .replace(/حصري/g, "")
+                .replace(/كامل/g, "")
+                .split("-")[0]
+                .split("|")[0]
+                .trim();
+
+              if (
+                !tempScrapedData[key].some((el) => el.targetUrl === item.link)
+              ) {
+                tempScrapedData[key].push({
+                  id: `${key}-${Math.random().toString(36).substr(2, 5)}`,
+                  title: cleanTitle,
+                  poster: item.poster,
+                  targetUrl: item.link,
+                });
+              }
+            });
+            console.log(
+              `✅ [جوجل عربي] لقطنا بنجاح ${tempScrapedData[key].length} عنوان عربي في حقل [${key}]`,
+            );
+          }
+        } catch (err) {
+          console.log("❌ فشل صيد العربي من جوجل:", err.message);
+        } finally {
+          try {
+            await page.close();
+          } catch (e) {
+            console.log("⚠️ فشل إغلاق الصفحة (جوجل عربي):", e.message);
+          }
+        }
+      }
     }
 
     console.log(
@@ -776,16 +803,21 @@ async function movieSniffer() {
   }
 
   // 🛡️ Safe check: only overwrite global cache if we successfully scraped movies
-  const totalCount = tempScrapedData.arabicMovies.length + 
-                     tempScrapedData.englishMovies.length + 
-                     tempScrapedData.arabicSeries.length + 
-                     tempScrapedData.englishSeries.length;
-                    
+  const totalCount =
+    tempScrapedData.arabicMovies.length +
+    tempScrapedData.englishMovies.length +
+    tempScrapedData.arabicSeries.length +
+    tempScrapedData.englishSeries.length;
+
   if (totalCount > 0) {
     scrapedData = tempScrapedData;
-    console.log(`✅ [Scraper] Successfully updated scrapedData cache with ${totalCount} items.`);
+    console.log(
+      `✅ [Scraper] Successfully updated scrapedData cache with ${totalCount} items.`,
+    );
   } else {
-    console.warn("⚠️ [Scraper] Scraped 0 items. Retaining previous in-memory cache data to prevent empty UI.");
+    console.warn(
+      "⚠️ [Scraper] Scraped 0 items. Retaining previous in-memory cache data to prevent empty UI.",
+    );
   }
   return totalCount;
 }
@@ -806,7 +838,9 @@ async function fetchCategoryFromDB(category) {
         poster: item.poster,
         targetUrl: item.url,
       }));
-      console.log(`🔌 [DB] Loaded ${scrapedData[category].length} items for category: ${category}`);
+      console.log(
+        `🔌 [DB] Loaded ${scrapedData[category].length} items for category: ${category}`,
+      );
     }
   } catch (err) {
     console.error(`❌ [DB] Error loading category ${category}:`, err.message);
@@ -838,22 +872,23 @@ app.get("/api/series/english", async (req, res) => {
 // ─── Fast HTTP Fetch Search Parser ───
 function parseSearchHTML(html, taskKey) {
   const items = [];
-  
+
   // 1. Scan structural anchor tags wrapping images (extremely generic, bypasses class name changes)
   // This matches: <a ... href="URL" ...> ... <img ... src="POSTER" ... alt="TITLE" ...> ... </a>
-  const anchorImgRegex = /<a\s+[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?<img\s+[^>]*>[\s\S]*?)<\/a>/gi;
+  const anchorImgRegex =
+    /<a\s+[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?<img\s+[^>]*>[\s\S]*?)<\/a>/gi;
   let match;
-  
+
   while ((match = anchorImgRegex.exec(html)) !== null) {
     const href = match[1];
     const innerContent = match[2];
-    
+
     // Ignore non-movie links
     if (
-      href.includes("/category/") || 
-      href.includes("/actor/") || 
-      href.includes("/genre/") || 
-      href.includes("/year/") || 
+      href.includes("/category/") ||
+      href.includes("/actor/") ||
+      href.includes("/genre/") ||
+      href.includes("/year/") ||
       href.includes("/tag/") ||
       href.includes("/tags/") ||
       href.includes("twitter.com") ||
@@ -868,48 +903,65 @@ function parseSearchHTML(html, taskKey) {
     ) {
       continue;
     }
-    
+
     // Extract poster from img tag
     let poster = "";
-    const imgMatch = innerContent.match(/<img\s+[^>]*(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i);
+    const imgMatch = innerContent.match(
+      /<img\s+[^>]*(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i,
+    );
     if (imgMatch) {
       poster = imgMatch[1];
     }
-    if (!poster || poster.includes("melody-lzld") || poster.includes("logo") || poster.includes("blank")) {
+    if (
+      !poster ||
+      poster.includes("melody-lzld") ||
+      poster.includes("logo") ||
+      poster.includes("blank")
+    ) {
       // Try standard src if data-src was not matched
-      const srcMatch = innerContent.match(/<img\s+[^>]*src=["'](https?:\/\/[^"']+)["']/i);
+      const srcMatch = innerContent.match(
+        /<img\s+[^>]*src=["'](https?:\/\/[^"']+)["']/i,
+      );
       if (srcMatch) poster = srcMatch[1];
     }
-    if (!poster || poster.includes("melody-lzld") || poster.includes("logo") || poster.includes("blank")) {
+    if (
+      !poster ||
+      poster.includes("melody-lzld") ||
+      poster.includes("logo") ||
+      poster.includes("blank")
+    ) {
       poster = "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
     }
-    
+
     // Extract title from img alt, title, or text
     let title = "";
-    const altMatch = innerContent.match(/alt=["']([^"']+)["']/i) || innerContent.match(/title=["']([^"']+)["']/i);
+    const altMatch =
+      innerContent.match(/alt=["']([^"']+)["']/i) ||
+      innerContent.match(/title=["']([^"']+)["']/i);
     if (altMatch) {
       title = altMatch[1].trim();
     }
-    
+
     // If title not found in img alt, try text contents inside the anchor
     if (!title || title.length < 2) {
       const textMatch = innerContent.replace(/<[^>]*>/g, "").trim();
       if (textMatch) title = textMatch;
     }
-    
+
     // Clean up title
     title = title.replace(/\s+/g, " ").trim();
-    
+
     if (title && title.length > 2) {
-      if (!items.some(i => i.link === href)) {
+      if (!items.some((i) => i.link === href)) {
         items.push({ title, poster, link: href });
       }
     }
   }
-  
+
   // 2. Fallback to card-class regex if the structural scan found nothing
   if (items.length === 0) {
-    const cardRegex = /<(div|a|article)[^>]+class="[^"]*(Small--Box|pm-video-thumb|pm-li-video|thumbnail|movie|card|content)[^"]*"[^>]*>([\s\S]*?)<\/\1>/gi;
+    const cardRegex =
+      /<(div|a|article)[^>]+class="[^"]*(Small--Box|pm-video-thumb|pm-li-video|thumbnail|movie|card|content)[^"]*"[^>]*>([\s\S]*?)<\/\1>/gi;
     let cardMatch;
     while ((cardMatch = cardRegex.exec(html)) !== null) {
       const cardContent = cardMatch[3];
@@ -917,8 +969,8 @@ function parseSearchHTML(html, taskKey) {
       if (!hrefMatch) continue;
       const href = hrefMatch[1];
       if (
-        href.includes("/category/") || 
-        href.includes("/actor/") || 
+        href.includes("/category/") ||
+        href.includes("/actor/") ||
         href.includes("/genre/") ||
         href.includes("twitter.com") ||
         href.includes("x.com") ||
@@ -927,22 +979,25 @@ function parseSearchHTML(html, taskKey) {
         href.includes("instagram.com") ||
         href.includes("t.me") ||
         href.includes("telegram")
-      ) continue;
-      
+      )
+        continue;
+
       let poster = "";
-      const imgMatch = cardContent.match(/(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i);
+      const imgMatch = cardContent.match(
+        /(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i,
+      );
       if (imgMatch) poster = imgMatch[1];
-      
+
       let title = "";
       const h3Match = cardContent.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
       if (h3Match) title = h3Match[1].replace(/<[^>]*>/g, "").trim();
-      
-      if (title && title.length > 2 && !items.some(i => i.link === href)) {
+
+      if (title && title.length > 2 && !items.some((i) => i.link === href)) {
         items.push({ title, poster, link: href });
       }
     }
   }
-  
+
   return items;
 }
 
@@ -951,20 +1006,23 @@ async function fetchSearchHTTP(url) {
   const origin = urlObj.origin;
 
   const headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    Accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     "Accept-Language": "ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7",
     "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-    "Referer": `${origin}/`,
-    "sec-ch-ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+    Pragma: "no-cache",
+    Referer: `${origin}/`,
+    "sec-ch-ua":
+      '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": '"Windows"',
     "sec-fetch-dest": "document",
     "sec-fetch-mode": "navigate",
     "sec-fetch-site": "same-origin",
     "sec-fetch-user": "?1",
-    "upgrade-insecure-requests": "1"
+    "upgrade-insecure-requests": "1",
   };
 
   const controller = new AbortController();
@@ -973,14 +1031,17 @@ async function fetchSearchHTTP(url) {
     const response = await fetch(url, {
       headers,
       method: "GET",
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(timeoutId);
     if (!response.ok) {
       throw new Error(`HTTP status ${response.status}`);
     }
     const html = await response.text();
-    const isCF = html.includes("Cloudflare") || html.includes("Just a moment") || html.includes("Security Check");
+    const isCF =
+      html.includes("Cloudflare") ||
+      html.includes("Just a moment") ||
+      html.includes("Security Check");
     if (isCF) {
       throw new Error("Blocked by Cloudflare DDoS page");
     }
@@ -1002,7 +1063,12 @@ app.get("/api/search", async (req, res) => {
   // Layer 1: Search in-memory scraped data (instant — no Puppeteer)
   // ══════════════════════════════════════════════════════════════════
   const localResults = [];
-  const allCats = ["englishMovies", "arabicMovies", "englishSeries", "arabicSeries"];
+  const allCats = [
+    "englishMovies",
+    "arabicMovies",
+    "englishSeries",
+    "arabicSeries",
+  ];
   for (const cat of allCats) {
     if (scrapedData[cat] && scrapedData[cat].length > 0) {
       for (const item of scrapedData[cat]) {
@@ -1015,7 +1081,9 @@ app.get("/api/search", async (req, res) => {
     }
   }
   if (localResults.length > 0) {
-    console.log(`✅ [Search API] Found ${localResults.length} results from in-memory cache`);
+    console.log(
+      `✅ [Search API] Found ${localResults.length} results from in-memory cache`,
+    );
     return res.json(localResults);
   }
 
@@ -1035,7 +1103,9 @@ app.get("/api/search", async (req, res) => {
           targetUrl: item.url,
           _source: "db",
         }));
-        console.log(`✅ [Search API] Found ${dbResults.length} results from MongoDB`);
+        console.log(
+          `✅ [Search API] Found ${dbResults.length} results from MongoDB`,
+        );
         return res.json(dbResults);
       }
     } catch (dbErr) {
@@ -1046,18 +1116,24 @@ app.get("/api/search", async (req, res) => {
   // Define active domains for search targets
   const activeDomains = {
     topcinema: "https://topcinemaa.cam",
-    mycima: "https://vid.mycima.cc"
+    mycima: "https://vid.mycima.cc",
   };
 
   if (mongoose.connection.readyState === 1) {
     try {
-      const topDoc = await Media.findOne({ url: { $regex: "topcinema" } }).sort({ fetchedAt: -1 });
+      const topDoc = await Media.findOne({ url: { $regex: "topcinema" } }).sort(
+        { fetchedAt: -1 },
+      );
       if (topDoc) activeDomains.topcinema = new URL(topDoc.url).origin;
 
-      const seedDoc = await Media.findOne({ url: { $regex: "asd|arabseed" } }).sort({ fetchedAt: -1 });
+      const seedDoc = await Media.findOne({
+        url: { $regex: "asd|arabseed" },
+      }).sort({ fetchedAt: -1 });
       if (seedDoc) activeDomains.arabseed = new URL(seedDoc.url).origin;
 
-      const cimaDoc = await Media.findOne({ url: { $regex: "mycima" } }).sort({ fetchedAt: -1 });
+      const cimaDoc = await Media.findOne({ url: { $regex: "mycima" } }).sort({
+        fetchedAt: -1,
+      });
       if (cimaDoc) activeDomains.mycima = new URL(cimaDoc.url).origin;
     } catch (dbErr) {
       console.error("⚠️ [Search API] Domain retrieval error:", dbErr.message);
@@ -1067,21 +1143,18 @@ app.get("/api/search", async (req, res) => {
   // Language Detection: Only scrape relevant sources to save RAM and time
   const isArabic = /[\u0600-\u06FF]/.test(q);
   const tasks = [];
-  
-  if (isArabic) {
-    tasks.push(
 
-      {
-        url: `${activeDomains.mycima}/search.php?keywords=${encodeURIComponent(query)}&video-id=`,
-        source: "mycima",
-        key: "arabicMovies"
-      }
-    );
+  if (isArabic) {
+    tasks.push({
+      url: `${activeDomains.mycima}/search.php?keywords=${encodeURIComponent(query)}&video-id=`,
+      source: "mycima",
+      key: "arabicMovies",
+    });
   } else {
     tasks.push({
       url: `https://tv9.egydead.live/?s=${encodeURIComponent(query)}`,
       source: "egydead",
-      key: "englishMovies"
+      key: "englishMovies",
     });
   }
 
@@ -1094,12 +1167,16 @@ app.get("/api/search", async (req, res) => {
 
   for (const task of tasks) {
     try {
-      console.log(`📡 [Search HTTP] Fetching ${task.source} search page: ${task.url}`);
+      console.log(
+        `📡 [Search HTTP] Fetching ${task.source} search page: ${task.url}`,
+      );
       const html = await fetchSearchHTTP(task.url);
       console.log(task.url);
-      
+
       const extracted = parseSearchHTML(html, task.key);
-      console.log(`✅ [Search HTTP] Extracted ${extracted.length} movies from ${task.source}`);
+      console.log(
+        `✅ [Search HTTP] Extracted ${extracted.length} movies from ${task.source}`,
+      );
 
       extracted.forEach((item) => {
         let cleanTitle = item.title
@@ -1130,27 +1207,35 @@ app.get("/api/search", async (req, res) => {
                 category: task.key,
                 fetchedAt: new Date(),
               },
-              { upsert: true, new: true }
-            ).catch((err) => console.error("❌ [Search HTTP] DB Cache error:", err.message));
+              { upsert: true, new: true },
+            ).catch((err) =>
+              console.error("❌ [Search HTTP] DB Cache error:", err.message),
+            );
           }
         }
       });
       httpSucceeded = true;
     } catch (err) {
-      console.warn(`⚠️ [Search HTTP] Failed for ${task.source}: ${err.message}`);
+      console.warn(
+        `⚠️ [Search HTTP] Failed for ${task.source}: ${err.message}`,
+      );
     }
   }
 
   if (httpSucceeded && httpResults.length > 0) {
-    console.log(`✅ [Search API] Return HTTP fetch results: ${httpResults.length} items`);
+    console.log(
+      `✅ [Search API] Return HTTP fetch results: ${httpResults.length} items`,
+    );
     return res.json(httpResults);
   }
 
   // ══════════════════════════════════════════════════════════════════
   // Layer 4: Puppeteer fallback (only if memory, DB, and HTTP fetches all failed)
   // ══════════════════════════════════════════════════════════════════
-  console.log(`🚨 [Search API] All HTTP fetches failed/blocked. Falling back to Puppeteer...`);
-  
+  console.log(
+    `🚨 [Search API] All HTTP fetches failed/blocked. Falling back to Puppeteer...`,
+  );
+
   let browser;
   try {
     browser = await launchBrowser();
@@ -1166,10 +1251,17 @@ app.get("/api/search", async (req, res) => {
         await blockPageResources(page);
 
         try {
-          await page.goto(task.url, { waitUntil: "domcontentloaded", timeout: 45000 });
-          console.log(`🔍 [Search API] Loaded ${task.source}: "${await page.title()}"`);
+          await page.goto(task.url, {
+            waitUntil: "domcontentloaded",
+            timeout: 45000,
+          });
+          console.log(
+            `🔍 [Search API] Loaded ${task.source}: "${await page.title()}"`,
+          );
         } catch (e) {
-          console.log(`⚠️ [Search API] ${task.source} timeout — trying extraction anyway: ${e.message}`);
+          console.log(
+            `⚠️ [Search API] ${task.source} timeout — trying extraction anyway: ${e.message}`,
+          );
         }
 
         await new Promise((r) => setTimeout(r, 1500));
@@ -1183,18 +1275,24 @@ app.get("/api/search", async (req, res) => {
         const extracted = await page.evaluate(() => {
           const items = [];
           const cards = document.querySelectorAll(
-            '.Small--Box, .pm-video-thumb, .pm-li-video, .thumbnail, [class*="movie"], [class*="card"], article'
+            '.Small--Box, .pm-video-thumb, .pm-li-video, .thumbnail, [class*="movie"], [class*="card"], article',
           );
           cards.forEach((card) => {
             let validAnchor = null;
             if (card.tagName === "A") {
               validAnchor = card;
             } else {
-              const anchors = Array.from(card.querySelectorAll('a'));
-              validAnchor = anchors.find(a => {
-                const href = a.getAttribute('href') || '';
-                return href && !href.startsWith('#') && !href.includes('javascript:') && !href.includes('modal-login-form');
-              }) || anchors[0];
+              const anchors = Array.from(card.querySelectorAll("a"));
+              validAnchor =
+                anchors.find((a) => {
+                  const href = a.getAttribute("href") || "";
+                  return (
+                    href &&
+                    !href.startsWith("#") &&
+                    !href.includes("javascript:") &&
+                    !href.includes("modal-login-form")
+                  );
+                }) || anchors[0];
             }
 
             const href = validAnchor?.href;
@@ -1221,21 +1319,44 @@ app.get("/api/search", async (req, res) => {
                 imgEl.src;
             }
             if (!posterUrl || posterUrl.includes("melody-lzld")) {
-              const bgSpan = card.querySelector('[data-lazy-style], [style*="background-image"]');
+              const bgSpan = card.querySelector(
+                '[data-lazy-style], [style*="background-image"]',
+              );
               if (bgSpan) {
-                const styleStr = bgSpan.getAttribute("data-lazy-style") || bgSpan.getAttribute("style");
+                const styleStr =
+                  bgSpan.getAttribute("data-lazy-style") ||
+                  bgSpan.getAttribute("style");
                 const match = styleStr?.match(/url\(['"]?(.*?)['"]?\)/);
                 if (match?.[1]) posterUrl = match[1];
               }
             }
             if (posterUrl && posterUrl.includes("melody-lzld"))
               posterUrl = "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
-            if (!posterUrl || posterUrl.includes("logo") || posterUrl.includes("blank")) return;
+            if (
+              !posterUrl ||
+              posterUrl.includes("logo") ||
+              posterUrl.includes("blank")
+            )
+              return;
 
-            const titleEl = card.querySelector("h3") || card.querySelector(".title") || card.querySelector(".ellipsis") || card.querySelector(".pm-title-link");
-            let title = titleEl ? titleEl.innerText.trim() : (imgEl && imgEl.alt ? imgEl.alt.trim() : "");
+            const titleEl =
+              card.querySelector("h3") ||
+              card.querySelector(".title") ||
+              card.querySelector(".ellipsis") ||
+              card.querySelector(".pm-title-link");
+            let title = titleEl
+              ? titleEl.innerText.trim()
+              : imgEl && imgEl.alt
+                ? imgEl.alt.trim()
+                : "";
             if (!title || title.length < 2) {
-              title = (validAnchor ? (validAnchor.innerText || validAnchor.textContent) : "").split('\n')[0].trim();
+              title = (
+                validAnchor
+                  ? validAnchor.innerText || validAnchor.textContent
+                  : ""
+              )
+                .split("\n")[0]
+                .trim();
             }
 
             if (title && title.length > 2) {
@@ -1247,13 +1368,18 @@ app.get("/api/search", async (req, res) => {
           return items;
         });
 
-        console.log(`🔍 [Search API] Extracted ${extracted.length} from ${task.source}`);
+        console.log(
+          `🔍 [Search API] Extracted ${extracted.length} from ${task.source}`,
+        );
         extracted.forEach((item) => {
           let cleanTitle = item.title
             .replace(/مشاهدة|فيلم|مسلسل|مترجم|اون لاين/g, "")
             .trim();
           let targetLink = item.link;
-          if (targetLink.includes("mycima") && targetLink.includes("watch.php")) {
+          if (
+            targetLink.includes("mycima") &&
+            targetLink.includes("watch.php")
+          ) {
             targetLink = targetLink.replace("watch.php", "play.php");
           }
           if (!results.some((r) => r.targetUrl === targetLink)) {
@@ -1276,26 +1402,37 @@ app.get("/api/search", async (req, res) => {
                   category: task.key,
                   fetchedAt: new Date(),
                 },
-                { upsert: true, new: true }
-              ).catch((err) => console.error("❌ [Search API] DB Cache error:", err.message));
+                { upsert: true, new: true },
+              ).catch((err) =>
+                console.error("❌ [Search API] DB Cache error:", err.message),
+              );
             }
           }
         });
       } catch (err) {
         console.error(`❌ [Search API] Error on ${task.source}:`, err.message);
       } finally {
-        if (page) { try { await page.close(); } catch (e) {} }
+        if (page) {
+          try {
+            await page.close();
+          } catch (e) {}
+        }
       }
     }
 
     res.json(results);
   } catch (err) {
     console.error("Search API Error:", err);
-    if (!res.headersSent) res.status(500).json({ error: "Search failed: " + err.message });
+    if (!res.headersSent)
+      res.status(500).json({ error: "Search failed: " + err.message });
   } finally {
-    if (browser) { try { await browser.close(); } catch (e) {} }
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (e) {}
+    }
   }
-})
+});
 
 // Endpoint للأفلام
 app.get("/api/movies", (req, res) => res.json(scrapedMovies));
@@ -1306,6 +1443,12 @@ const streamCache = new Map(); // key: watchUrl, value: { streamUrl, type, refer
 async function getOrSniffStream(url) {
   if (!url) return null;
   const cleanUrl = cleanMovieUrl(url);
+  const isEmbedPlayerPage = cleanUrl.includes("embed") || 
+                            cleanUrl.includes("stmruby.com") || 
+                            cleanUrl.includes("streamwish") || 
+                            cleanUrl.includes("doodstream") ||
+                            cleanUrl.includes("streamruby");
+
   const cached = streamCache.get(cleanUrl);
   if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
     console.log(`⚡ [Cache Hit] Stream found in cache for: ${cleanUrl}`);
@@ -1342,7 +1485,9 @@ async function getOrSniffStream(url) {
         // 1. Block heavy resources that are NOT needed for sniffing
         const resourceType = r.resourceType();
         if (
-          ["image", "stylesheet", "font", "ping", "manifest"].includes(resourceType)
+          ["image", "stylesheet", "font", "ping", "manifest"].includes(
+            resourceType,
+          )
         ) {
           r.abort().catch(() => {});
           return;
@@ -1413,7 +1558,74 @@ async function getOrSniffStream(url) {
       }
     };
 
-    // ── Step 1: Navigate to movie page (tolerate timeout — content may already be in DOM) ──
+    // Helper function to extract embed/iframe URL from DOM, skipping ad/tracker domains
+    const extractEmbedFromDOM = async () => {
+      try {
+        return await page.evaluate(() => {
+          const blockedKeywords = [
+            "youtube.com", "youtu.be", "facebook.com", "google.com", "twitter.com", "instagram.com",
+            "dtscout.com", "exoclick.com", "popads.net", "adsterra.com", "doubleclick.net",
+            "google-analytics.com", "histats.com", "onclickads.net", "a.orbsrv.com", "juicyads.com",
+            "exdynsrv.com", "click", "adservice", "analytics", "ads"
+          ];
+          
+          const isBlocked = (src) => {
+            if (!src) return true;
+            return blockedKeywords.some(kw => src.toLowerCase().includes(kw));
+          };
+
+          // 0. Prioritize checking for explicit server elements (e.g. EgyDead .servers buttons, or class/id containing server)
+          const serverElements = document.querySelectorAll(
+            '.servers, .serversList li, [class*="server"] li, [class*="server"] a, [class*="server"] button, [class*="server"], [id*="server"], .server-item'
+          );
+          for (let el of serverElements) {
+            const src =
+              el.getAttribute("data-url") ||
+              el.getAttribute("data-src") ||
+              el.getAttribute("data-link") ||
+              el.href;
+            if (src && src.startsWith("http") && !isBlocked(src)) {
+              return src;
+            }
+          }
+
+          // 1. Check all iframes, ignoring social/trailer/ad iframes
+          const iframes = Array.from(document.querySelectorAll("iframe"));
+          for (let iframe of iframes) {
+            const src =
+              iframe.src ||
+              iframe.getAttribute("data-src") ||
+              iframe.getAttribute("data-lazy-src");
+            if (src && src.startsWith("http") && !isBlocked(src)) {
+              return src;
+            }
+          }
+          // 2. Check video elements directly
+          const videos = Array.from(
+            document.querySelectorAll("video source, video[src]")
+          );
+          for (let v of videos) {
+            const src = v.src || v.getAttribute("data-src");
+            if (src && src.startsWith("http")) return src;
+          }
+          // 3. Scan inline scripts for m3u8 URLs
+          const scripts = Array.from(
+            document.querySelectorAll("script:not([src])")
+          );
+          for (let s of scripts) {
+            const m = (s.textContent || "").match(
+              /["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/
+            );
+            if (m) return m[1];
+          }
+          return null;
+        });
+      } catch (e) {
+        return null;
+      }
+    };
+
+    // ── Step 1: Navigate to movie page ──
     console.log(`🔍 [Sniffer] Navigating to movie page: ${cleanUrl}`);
     try {
       await page.goto(cleanUrl, {
@@ -1422,23 +1634,44 @@ async function getOrSniffStream(url) {
       });
       console.log("🔍 [Sniffer] Movie page loaded. Title:", await page.title());
     } catch (e) {
-      console.log(
-        `⚠️ [Sniffer] Navigation timeout: ${e.message}`,
-      );
+      console.log(`⚠️ [Sniffer] Navigation timeout: ${e.message}`);
     }
 
     checkEarlyExit();
 
+    // Check immediately if embed URL is already present in DOM (only if it's not an embed page itself)
+    let embedUrl = null;
+    if (!isEmbedPlayerPage) {
+      embedUrl = await extractEmbedFromDOM();
+      if (embedUrl) {
+        console.log(`🎯 [Sniffer] Quick Exit 1: Found embed URL immediately: ${embedUrl}`);
+        const data = {
+          streamUrl: embedUrl,
+          type: "iframe",
+          referer: cleanUrl,
+          timestamp: Date.now(),
+        };
+        streamCache.set(cleanUrl, data);
+        return data;
+      }
+    }
+
     // Check if there is a "Watch Now" (المشاهدة والتحميل) button that needs to be clicked
     try {
-      const watchNowSelector = ".watchNow button, button.watchNow, .watchNow input[type='submit']";
+      const watchNowSelector =
+        ".watchNow button, button.watchNow, .watchNow input[type='submit']";
       const hasWatchButton = await page.evaluate((sel) => {
         const btn = document.querySelector(sel);
         if (btn) return true;
-        const buttons = Array.from(document.querySelectorAll("button, input[type='submit'], a"));
+        const buttons = Array.from(
+          document.querySelectorAll("button, input[type='submit'], a")
+        );
         for (let b of buttons) {
           const txt = b.innerText || b.textContent || "";
-          if (txt.includes("المشاهده والتحميل") || txt.includes("المشاهدة والتحميل")) {
+          if (
+            txt.includes("المشاهده والتحميل") ||
+            txt.includes("المشاهدة والتحميل")
+          ) {
             return true;
           }
         }
@@ -1446,109 +1679,87 @@ async function getOrSniffStream(url) {
       }, watchNowSelector);
 
       if (hasWatchButton) {
-        console.log("🎯 [Sniffer] Found a 'Watch Now' button/form. Clicking it to reveal streams...");
+        console.log(
+          "🎯 [Sniffer] Found a 'Watch Now' button/form. Clicking it to reveal streams..."
+        );
         await page.evaluate((sel) => {
           const btn = document.querySelector(sel);
           if (btn) {
             btn.click();
             return;
           }
-          const buttons = Array.from(document.querySelectorAll("button, input[type='submit'], a"));
+          const buttons = Array.from(
+            document.querySelectorAll("button, input[type='submit'], a")
+          );
           for (let b of buttons) {
             const txt = b.innerText || b.textContent || "";
-            if (txt.includes("المشاهده والتحميل") || txt.includes("المشاهدة والتحميل")) {
+            if (
+              txt.includes("المشاهده والتحميل") ||
+              txt.includes("المشاهدة والتحميل")
+            ) {
               b.click();
               return;
             }
           }
         }, watchNowSelector);
+
+        console.log(
+          "🎯 [Sniffer] Clicked button, waiting for page navigation..."
+        );
+        await page
+          .waitForNavigation({ waitUntil: "domcontentloaded", timeout: 8000 })
+          .catch((e) => {
+            console.log(
+              `⚠️ [Sniffer] Navigation warning after click: ${e.message}`
+            );
+          });
+          
+        checkEarlyExit();
         
-        console.log("🎯 [Sniffer] Clicked button, waiting for page navigation...");
-        await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 8000 }).catch((e) => {
-          console.log(`⚠️ [Sniffer] Navigation warning after click: ${e.message}`);
-        });
+        // Check again after click/navigation
+        if (!isEmbedPlayerPage) {
+          embedUrl = await extractEmbedFromDOM();
+          if (embedUrl) {
+            console.log(`🎯 [Sniffer] Quick Exit 2: Found embed URL after click: ${embedUrl}`);
+            const data = {
+              streamUrl: embedUrl,
+              type: "iframe",
+              referer: cleanUrl,
+              timestamp: Date.now(),
+            };
+            streamCache.set(cleanUrl, data);
+            return data;
+          }
+        }
       }
     } catch (btnErr) {
-      console.error("⚠️ [Sniffer] Error checking/clicking Watch Now button:", btnErr.message);
-    }
-
-    checkEarlyExit();
-
-    // Dynamic wait up to 4 seconds, checking every 500ms
-    console.log("🔍 [Sniffer] Dynamic waiting for stream...");
-    for (let i = 0; i < 8; i++) {
-      checkEarlyExit();
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    checkEarlyExit();
-
-    // ── Step 2: Always extract embed URL even after timeout ──
-    console.log("🔍 [Sniffer] Extracting embed player from page DOM...");
-    let embedUrl = null;
-    try {
-      embedUrl = await page.evaluate(() => {
-        // 0. Prioritize checking for explicit server elements (e.g. EgyDead .servers buttons, or class/id containing server)
-        const serverElements = document.querySelectorAll(".servers, .serversList li, [class*=\"server\"] li, [class*=\"server\"] a, [class*=\"server\"] button, [class*=\"server\"], [id*=\"server\"], .server-item");
-        for (let el of serverElements) {
-          const src = el.getAttribute("data-url") || el.getAttribute("data-src") || el.getAttribute("data-link") || el.href;
-          if (
-            src && 
-            src.startsWith("http") && 
-            !src.includes("youtube.com") && 
-            !src.includes("youtu.be") && 
-            !src.includes("facebook.com") && 
-            !src.includes("twitter.com") &&
-            !src.includes("google.com")
-          ) {
-            return src;
-          }
-        }
-
-        // 1. Check all iframes, ignoring social/trailer iframes
-        const iframes = Array.from(document.querySelectorAll("iframe"));
-        for (let iframe of iframes) {
-          const src =
-            iframe.src ||
-            iframe.getAttribute("data-src") ||
-            iframe.getAttribute("data-lazy-src");
-          if (
-            src && 
-            src.startsWith("http") && 
-            !src.includes("youtube.com") && 
-            !src.includes("youtu.be") && 
-            !src.includes("facebook.com") && 
-            !src.includes("google.com") &&
-            !src.includes("twitter.com") &&
-            !src.includes("instagram.com")
-          ) {
-            return src;
-          }
-        }
-        // 2. Check video elements directly
-        const videos = Array.from(
-          document.querySelectorAll("video source, video[src]"),
-        );
-        for (let v of videos) {
-          const src = v.src || v.getAttribute("data-src");
-          if (src && src.startsWith("http")) return src;
-        }
-        // 3. Scan inline scripts for m3u8 URLs
-        const scripts = Array.from(
-          document.querySelectorAll("script:not([src])"),
-        );
-        for (let s of scripts) {
-          const m = (s.textContent || "").match(
-            /["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/,
-          );
-          if (m) return m[1];
-        }
-        return null;
-      });
-      console.log(
-        `🔍 [Sniffer] Embed URL extracted: ${embedUrl || "none found"}`,
+      console.error(
+        "⚠️ [Sniffer] Error checking/clicking Watch Now button:",
+        btnErr.message
       );
-    } catch (evalErr) {
-      console.log(`⚠️ [Sniffer] DOM evaluation error: ${evalErr.message}`);
+    }
+
+    checkEarlyExit();
+
+    // If still not found, wait up to 2 seconds checking for iframe (only if not an embed page itself)
+    if (!isEmbedPlayerPage) {
+      console.log("🔍 [Sniffer] Waiting and polling for embed iframe...");
+      for (let i = 0; i < 10; i++) {
+        checkEarlyExit();
+        embedUrl = await extractEmbedFromDOM();
+        if (embedUrl) {
+          console.log(`🎯 [Sniffer] Quick Exit 3: Found embed URL after poll: ${embedUrl}`);
+          const data = {
+            streamUrl: embedUrl,
+            type: "iframe",
+            referer: cleanUrl,
+            timestamp: Date.now(),
+          };
+          streamCache.set(cleanUrl, data);
+          return data;
+        }
+        await new Promise((r) => setTimeout(r, 200));
+      }
     }
 
     checkEarlyExit();
@@ -1630,8 +1841,7 @@ async function getOrSniffStream(url) {
             if (window.videojs && window.videojs.players) {
               for (let key of Object.keys(window.videojs.players)) {
                 const p = window.videojs.players[key];
-                if (p && p.currentSrc && p.currentSrc())
-                  return p.currentSrc();
+                if (p && p.currentSrc && p.currentSrc()) return p.currentSrc();
                 if (p && p.src && p.src()) return p.src();
               }
             }
@@ -1709,7 +1919,7 @@ async function getOrSniffStream(url) {
               await new Promise((r) => setTimeout(r, 500));
             }
           }
-          
+
           checkEarlyExit();
 
           await Promise.race([
@@ -2297,9 +2507,13 @@ async function sniffStream(url, page) {
 
 // Schedule initial matches scraping after 45 seconds to avoid high RAM/CPU on boot
 setTimeout(() => {
-  console.log("⏰ [Startup Background] Starting initial matches scraping (masterSniffer) now...");
-  masterSniffer().catch((err) => console.error("Error in initial masterSniffer:", err));
-  
+  console.log(
+    "⏰ [Startup Background] Starting initial matches scraping (masterSniffer) now...",
+  );
+  masterSniffer().catch((err) =>
+    console.error("Error in initial masterSniffer:", err),
+  );
+
   // Repeat the process every 15 minutes
   setInterval(masterSniffer, 15 * 60 * 1000);
 }, 45000);
@@ -2307,10 +2521,45 @@ setTimeout(() => {
 // الـ APIs للـ Frontend
 app.get("/api/schedule", (req, res) => res.json(scrapedMatches));
 
+// Helper functions to check for direct media and HLS playlists
+function isDirectMediaUrl(url) {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return lower.includes(".m3u8") ||
+         lower.includes(".mp4") ||
+         lower.includes(".ts") ||
+         lower.includes(".image") ||
+         lower.includes("urlset") ||
+         lower.includes("segment") ||
+         lower.includes("chunk") ||
+         lower.includes("vkuser.net") ||
+         lower.includes("vk.com") ||
+         lower.endsWith("/video") ||
+         lower.endsWith("/video/");
+}
+
+function isHlsUrl(url) {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return lower.includes(".m3u8") ||
+         lower.includes("urlset") ||
+         lower.includes("vkuser.net") ||
+         lower.includes("vk.com") ||
+         lower.endsWith("/video") ||
+         lower.endsWith("/video/");
+}
+
 // تنظيف وتصحيح رابط المشاهدة لسينما وتجنب //watch
 function cleanMovieUrl(url) {
   if (!url) return url;
   let clean = url;
+
+  // 1. Replace unicode-escaped ampersands (\u0026 or \\u0026) with standard ampersands (&)
+  clean = clean.replace(/\\+u0026/gi, "&");
+
+  // 2. Remove trailing percent signs which cause malformed URI errors
+  clean = clean.replace(/%+$/, "");
+
   if (clean.includes("rgetUrl=")) {
     clean = decodeURIComponent(clean.split("rgetUrl=")[1]);
   }
@@ -2334,22 +2583,28 @@ app.get("/api/stream", async (req, res) => {
   if (!targetUrl) return res.status(400).send("الرابط مطلوب");
 
   targetUrl = cleanMovieUrl(targetUrl);
-  
+
   if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
-    console.log(`⚠️ [Stream API] URL is invalid. Searching DB for query: "${targetUrl}"`);
+    console.log(
+      `⚠️ [Stream API] URL is invalid. Searching DB for query: "${targetUrl}"`,
+    );
     if (mongoose.connection.readyState === 1) {
       try {
         const match = await Media.findOne({
           $or: [
             { title: { $regex: targetUrl, $options: "i" } },
-            { url: { $regex: targetUrl, $options: "i" } }
-          ]
+            { url: { $regex: targetUrl, $options: "i" } },
+          ],
         }).sort({ fetchedAt: -1 });
         if (match) {
-          console.log(`🎯 [Stream API] Found matching URL for stream: ${match.url}`);
+          console.log(
+            `🎯 [Stream API] Found matching URL for stream: ${match.url}`,
+          );
           targetUrl = match.url;
         } else {
-          return res.status(400).send("الرابط غير صالح ولم يتم العثور على فيلم مطابق");
+          return res
+            .status(400)
+            .send("الرابط غير صالح ولم يتم العثور على فيلم مطابق");
         }
       } catch (e) {
         return res.status(400).send("الرابط غير صالح");
@@ -2372,14 +2627,7 @@ app.get("/api/stream", async (req, res) => {
     let finalReferer = referer;
 
     // If it's not a direct stream file, we might need to sniff it first
-    const isDirect = targetUrl.includes(".m3u8") || 
-                     targetUrl.includes(".mp4") || 
-                     targetUrl.includes(".ts") || 
-                     targetUrl.includes(".image") || 
-                     targetUrl.includes("urlset") || 
-                     targetUrl.includes("segment") || 
-                     targetUrl.includes("chunk") || 
-                     req.query.referer;
+    const isDirect = isDirectMediaUrl(targetUrl) || req.query.referer;
 
     if (!isDirect) {
       const result = await getOrSniffStream(targetUrl);
@@ -2392,48 +2640,56 @@ app.get("/api/stream", async (req, res) => {
     }
 
     const parsedUrl = new URL(finalStreamUrl);
-    const isM3u8 = parsedUrl.pathname.endsWith(".m3u8") || finalStreamUrl.includes("urlset") || finalStreamUrl.includes(".m3u8");
+    const isM3u8 = isHlsUrl(finalStreamUrl);
 
     const fetchHeaders = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     };
     if (finalReferer) {
       fetchHeaders["Referer"] = finalReferer;
     }
 
     if (isM3u8) {
-      console.log(`📡 [HLS Proxy] Fetching and parsing playlist: ${finalStreamUrl}`);
+      console.log(
+        `📡 [HLS Proxy] Fetching and parsing playlist: ${finalStreamUrl}`,
+      );
       const response = await fetch(finalStreamUrl, { headers: fetchHeaders });
       if (!response.ok) {
-        return res.status(response.status).send(`Failed to fetch playlist: ${response.statusText}`);
+        return res
+          .status(response.status)
+          .send(`Failed to fetch playlist: ${response.statusText}`);
       }
-      
+
       const text = await response.text();
       const lines = text.split(/\r?\n/);
-      const rewrittenLines = lines.map(line => {
+      const rewrittenLines = lines.map((line) => {
         const trimmed = line.trim();
         if (!trimmed) return line;
 
         let processedLine = line;
-        
+
         // Rewrite URI attributes in HLS tags (like keys, audio, or I-frame lists)
         if (processedLine.startsWith("#")) {
           if (processedLine.includes("URI=")) {
-            processedLine = processedLine.replace(/URI="([^"]+)"/g, (match, urlValue) => {
-              let absoluteUrl = urlValue;
-              try {
-                absoluteUrl = new URL(urlValue, finalStreamUrl).href;
-              } catch (e) {}
-              
-              const host = req.headers.host;
-              const protocol = req.secure ? "https" : "http";
-              const proxiedUrl = `${protocol}://${host}/api/stream?url=${encodeURIComponent(absoluteUrl)}${finalReferer ? `&referer=${encodeURIComponent(finalReferer)}` : ""}`;
-              return `URI="${proxiedUrl}"`;
-            });
+            processedLine = processedLine.replace(
+              /URI="([^"]+)"/g,
+              (match, urlValue) => {
+                let absoluteUrl = urlValue;
+                try {
+                  absoluteUrl = new URL(urlValue, finalStreamUrl).href;
+                } catch (e) {}
+
+                const host = req.headers.host;
+                const protocol = req.secure ? "https" : "http";
+                const proxiedUrl = `${protocol}://${host}/api/stream?url=${encodeURIComponent(absoluteUrl)}${finalReferer ? `&referer=${encodeURIComponent(finalReferer)}` : ""}`;
+                return `URI="${proxiedUrl}"`;
+              },
+            );
           }
           return processedLine;
         }
-        
+
         let absoluteUrl = trimmed;
         try {
           absoluteUrl = new URL(trimmed, finalStreamUrl).href;
@@ -2450,21 +2706,31 @@ app.get("/api/stream", async (req, res) => {
       // Fetching segment silenty to avoid spamming the console
       const response = await fetch(finalStreamUrl, { headers: fetchHeaders });
       if (!response.ok) {
-        return res.status(response.status).send(`Failed to fetch segment: ${response.statusText}`);
+        return res
+          .status(response.status)
+          .send(`Failed to fetch segment: ${response.statusText}`);
       }
 
       const contentType = response.headers.get("content-type") || "";
       const contentLengthStr = response.headers.get("content-length");
-      const contentLength = contentLengthStr ? parseInt(contentLengthStr, 10) : 0;
+      const contentLength = contentLengthStr
+        ? parseInt(contentLengthStr, 10)
+        : 0;
 
       // Classify if it's a small chunk/segment vs large media file
-      const isSegment = finalStreamUrl.includes(".ts") || finalStreamUrl.includes(".image") || finalStreamUrl.includes("segment") || contentLength < 15 * 1024 * 1024;
+      const isSegment =
+        finalStreamUrl.includes(".ts") ||
+        finalStreamUrl.includes(".image") ||
+        finalStreamUrl.includes("segment") ||
+        contentLength < 15 * 1024 * 1024;
 
       if (!isSegment) {
-        console.log(`📡 [Segment Proxy] Piping large file directly (${contentLengthStr} bytes)`);
+        console.log(
+          `📡 [Segment Proxy] Piping large file directly (${contentLengthStr} bytes)`,
+        );
         res.setHeader("Content-Type", contentType);
         if (contentLengthStr) res.setHeader("Content-Length", contentLengthStr);
-        
+
         const reader = response.body.getReader();
         while (true) {
           const { done, value } = await reader.read();
@@ -2479,7 +2745,10 @@ app.get("/api/stream", async (req, res) => {
       const arrayBuffer = await response.arrayBuffer();
       let buffer = Buffer.from(arrayBuffer);
 
-      if (buffer.length > 8 && buffer.slice(0, 8).toString("hex") === "89504e470d0a1a0a") {
+      if (
+        buffer.length > 8 &&
+        buffer.slice(0, 8).toString("hex") === "89504e470d0a1a0a"
+      ) {
         const tsOffset = buffer.indexOf(0x47, 8);
         if (tsOffset !== -1) {
           buffer = buffer.slice(tsOffset);
@@ -2498,6 +2767,96 @@ app.get("/api/stream", async (req, res) => {
   }
 });
 
+app.get("/player", (req, res) => {
+  const streamUrl = req.query.url;
+  if (!streamUrl) return res.status(400).send("الرابط مطلوب");
+
+  res.send(`
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مشغل البث</title>
+  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #000;
+      overflow: hidden;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .plyr {
+      height: 100% !important;
+      width: 100% !important;
+    }
+  </style>
+</head>
+<body>
+  <video id="player" playsinline controls autoplay muted></video>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const streamUrl = urlParams.get('url');
+      if (!streamUrl) return;
+
+      const video = document.getElementById('player');
+      
+      const setupPlyr = () => {
+        new Plyr(video, {
+          controls: [
+            'play-large', 'play', 'progress', 'current-time', 
+            'duration', 'mute', 'volume', 'captions', 
+            'settings', 'pip', 'airplay', 'fullscreen'
+          ],
+          settings: ['quality', 'speed'],
+          keyboard: { focused: true, global: true },
+          seekTime: 5
+        });
+      };
+
+      const isHls = streamUrl.includes('.m3u8') || 
+                    streamUrl.includes('urlset') || 
+                    streamUrl.includes('vkuser.net') || 
+                    streamUrl.includes('vk.com') ||
+                    streamUrl.includes('/video');
+
+      if (isHls && Hls.isSupported()) {
+        const hls = new Hls({
+          maxMaxBufferLength: 10,
+        });
+        hls.loadSource(streamUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          setupPlyr();
+          video.play().catch(() => {});
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = streamUrl;
+        setupPlyr();
+        video.play().catch(() => {});
+      } else {
+        video.src = streamUrl;
+        setupPlyr();
+        video.play().catch(() => {});
+      }
+    });
+  </script>
+</body>
+</html>
+  `);
+});
+
 // 2. Endpoint مشغل الأفلام النظيف (JSON metadata) لعنصر الـ iframe في الفرونت إند
 app.get("/api/media/stream", async (req, res) => {
   let targetUrl = req.query.targetUrl || req.query.url;
@@ -2506,20 +2865,28 @@ app.get("/api/media/stream", async (req, res) => {
   targetUrl = cleanMovieUrl(targetUrl);
 
   if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
-    console.log(`⚠️ [Media Stream API] URL is invalid. Searching DB for query: "${targetUrl}"`);
+    console.log(
+      `⚠️ [Media Stream API] URL is invalid. Searching DB for query: "${targetUrl}"`,
+    );
     if (mongoose.connection.readyState === 1) {
       try {
         const match = await Media.findOne({
           $or: [
             { title: { $regex: targetUrl, $options: "i" } },
-            { url: { $regex: targetUrl, $options: "i" } }
-          ]
+            { url: { $regex: targetUrl, $options: "i" } },
+          ],
         }).sort({ fetchedAt: -1 });
         if (match) {
-          console.log(`🎯 [Media Stream API] Found matching URL for movie: ${match.url}`);
+          console.log(
+            `🎯 [Media Stream API] Found matching URL for movie: ${match.url}`,
+          );
           targetUrl = match.url;
         } else {
-          return res.status(400).json({ error: "الرابط غير صالح ولم يتم العثور على نتائج بحث مطابقة له" });
+          return res
+            .status(400)
+            .json({
+              error: "الرابط غير صالح ولم يتم العثور على نتائج بحث مطابقة له",
+            });
         }
       } catch (e) {
         return res.status(400).json({ error: "الرابط غير صالح" });
@@ -2529,32 +2896,57 @@ app.get("/api/media/stream", async (req, res) => {
     }
   }
 
-  const bypassCache = req.query.bypassCache === "true" || req.query.refresh === "true";
-  console.log(`🎬 [Media Stream API] Request for: ${targetUrl} (bypassCache: ${bypassCache})`);
+  const bypassCache =
+    req.query.bypassCache === "true" || req.query.refresh === "true";
+  console.log(
+    `🎬 [Media Stream API] Request for: ${targetUrl} (bypassCache: ${bypassCache})`,
+  );
+
+  if (isDirectMediaUrl(targetUrl)) {
+    console.log(`🎯 [Media Stream API] Direct URL early exit: ${targetUrl}`);
+    const protocol = req.secure ? "https" : "http";
+    const proxiedUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(targetUrl)}`;
+    const playerUrl = `${protocol}://${req.headers.host}/player?url=${encodeURIComponent(proxiedUrl)}`;
+    return res.json({ streamUrl: playerUrl, type: "iframe" });
+  }
 
   try {
     // 1. Check MongoDB first (Cache-First)
     const cached = await Media.findOne({ url: targetUrl });
     console.log("cached", cached);
-    
+
     const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000);
-    const isCachedStreamInvalid = cached && cached.streamUrl && (cached.streamUrl.includes("youtube.com") || cached.streamUrl.includes("youtu.be"));
-    
-    if (!bypassCache && cached && cached.streamUrl && cached.fetchedAt && cached.fetchedAt > oneHourAgo && !isCachedStreamInvalid) {
+    const isCachedStreamInvalid =
+      cached &&
+      cached.streamUrl &&
+      (cached.streamUrl.includes("youtube.com") ||
+        cached.streamUrl.includes("youtu.be"));
+
+    if (
+      !bypassCache &&
+      cached &&
+      cached.streamUrl &&
+      cached.fetchedAt &&
+      cached.fetchedAt > oneHourAgo &&
+      !isCachedStreamInvalid
+    ) {
       console.log(
         `⚡ [Cache Hit - DB] Found fresh stream in database for: ${targetUrl}`,
       );
-      
+
       let finalUrl = cached.streamUrl;
       let finalType = cached.type;
-      
-      if (finalUrl.includes(".m3u8") || finalUrl.includes("urlset")) {
-        console.log(`📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP/CORS lock: ${finalUrl}`);
+
+      if (isHlsUrl(finalUrl)) {
+        console.log(
+          `📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP/CORS lock: ${finalUrl}`,
+        );
         const protocol = req.secure ? "https" : "http";
-        finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}${targetUrl ? `&referer=${encodeURIComponent(targetUrl)}` : ""}`;
-        finalType = "direct";
+        const proxiedUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}${targetUrl ? `&referer=${encodeURIComponent(targetUrl)}` : ""}`;
+        finalUrl = `${protocol}://${req.headers.host}/player?url=${encodeURIComponent(proxiedUrl)}`;
+        finalType = "iframe";
       }
-      
+
       return res.json({ streamUrl: finalUrl, type: finalType });
     }
 
@@ -2584,12 +2976,15 @@ app.get("/api/media/stream", async (req, res) => {
 
       let finalUrl = result.streamUrl;
       let finalType = result.type;
-      
-      if (finalUrl.includes(".m3u8") || finalUrl.includes("urlset")) {
-        console.log(`📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP/CORS lock: ${finalUrl}`);
+
+      if (isHlsUrl(finalUrl)) {
+        console.log(
+          `📡 [Proxy Stream Redirect] Proxying HLS stream to bypass IP/CORS lock: ${finalUrl}`,
+        );
         const protocol = req.secure ? "https" : "http";
-        finalUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}${targetUrl ? `&referer=${encodeURIComponent(targetUrl)}` : ""}`;
-        finalType = "direct";
+        const proxiedUrl = `${protocol}://${req.headers.host}/api/stream?url=${encodeURIComponent(finalUrl)}${targetUrl ? `&referer=${encodeURIComponent(targetUrl)}` : ""}`;
+        finalUrl = `${protocol}://${req.headers.host}/player?url=${encodeURIComponent(proxiedUrl)}`;
+        finalType = "iframe";
       }
 
       return res.json({ streamUrl: finalUrl, type: finalType });
@@ -2600,7 +2995,13 @@ app.get("/api/media/stream", async (req, res) => {
     }
   } catch (err) {
     console.error(`❌ Error in /api/media/stream:`, err.stack || err.message);
-    return res.status(500).json({ error: "حدث خطأ أثناء قنص البث", debug: err.message, stack: err.stack });
+    return res
+      .status(500)
+      .json({
+        error: "حدث خطأ أثناء قنص البث",
+        debug: err.message,
+        stack: err.stack,
+      });
   }
 });
 
@@ -2671,7 +3072,9 @@ async function runHourlyCronJob() {
   console.log("🎬 [Cron Job] Running movieSniffer to update movie lists...");
   const totalScraped = await movieSniffer();
   if (!totalScraped || totalScraped === 0) {
-    console.warn("⚠️ [Cron Job] movieSniffer returned 0 items. Skipping database update to preserve existing cache.");
+    console.warn(
+      "⚠️ [Cron Job] movieSniffer returned 0 items. Skipping database update to preserve existing cache.",
+    );
     return;
   }
 
@@ -2771,18 +3174,27 @@ async function initializeStartup() {
       movieCount = await Media.countDocuments({});
       console.log(`🔌 [DB Check] Database contains ${movieCount} media items.`);
     } catch (err) {
-      console.error("❌ [DB Check] Error counting media documents:", err.message);
+      console.error(
+        "❌ [DB Check] Error counting media documents:",
+        err.message,
+      );
     }
   }
 
   if (movieCount > 0) {
-    console.log("🚀 [Startup] Skipping initial scraping job since database has seeded data.");
+    console.log(
+      "🚀 [Startup] Skipping initial scraping job since database has seeded data.",
+    );
   } else {
-    console.log("🚀 [Startup] Database is empty. Scheduling initial movie scraping in the background after 90 seconds...");
+    console.log(
+      "🚀 [Startup] Database is empty. Scheduling initial movie scraping in the background after 90 seconds...",
+    );
     setTimeout(() => {
-      console.log("⏰ [Startup Background] Starting initial movie scraping job now...");
+      console.log(
+        "⏰ [Startup Background] Starting initial movie scraping job now...",
+      );
       runHourlyCronJob().catch((err) =>
-        console.error("Error running background startup cron job:", err)
+        console.error("Error running background startup cron job:", err),
       );
     }, 90000); // 90 seconds delay
   }
@@ -2794,7 +3206,9 @@ loadFallback();
 // Start Express server immediately and bind to the PORT to avoid 502 Bad Gateway on Render
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`🚀 Slayer Scraper Running on Port ${PORT} (Initializing DB connection in background...)`);
+  console.log(
+    `🚀 Slayer Scraper Running on Port ${PORT} (Initializing DB connection in background...)`,
+  );
 });
 
 // Handle the background DB connection results when they resolve
@@ -2803,7 +3217,10 @@ dbConnectPromise
     await initializeStartup();
   })
   .catch((err) => {
-    console.error("❌ MongoDB Connection Error on startup:", err.message || err);
+    console.error(
+      "❌ MongoDB Connection Error on startup:",
+      err.message || err,
+    );
     console.log("⚠️ Starting server in Fallback Mode (No DB connection)...");
     initializeStartup();
   });
