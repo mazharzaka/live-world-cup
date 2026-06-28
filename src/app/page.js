@@ -75,8 +75,8 @@ function MatchCard({ match, isActive, onWatch }) {
     >
       {/* البطولة + بادج المباشر */}
       <div className="match-competition">
-        <span>{match.competition}</span>
-        {match.isLive && (
+        <span>{match?.competition}</span>
+        {match?.isLive && (
           <span className="live-badge">
             <span className="live-badge-dot" />
             مباشر
