@@ -92,6 +92,16 @@ body {
     radial-gradient(ellipse 60% 40% at 85% 90%, hsla(349, 90%, 60%, 0.07) 0%, transparent 60%);
 }
 
+body.fixed-page {
+  height: 100vh;
+  overflow: hidden;
+}
+
+body.fixed-page .app-shell {
+  height: 100vh;
+  overflow: hidden;
+}
+
 /* خلفية شبكية دقيقة */
 body::before {
   content: '';
@@ -389,6 +399,7 @@ body::before {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 .sidebar-header {
@@ -430,6 +441,7 @@ body::before {
   padding: 12px;
   scrollbar-width: thin;
   scrollbar-color: var(--clr-border) transparent;
+  min-height: 0;
 }
 
 .matches-list::-webkit-scrollbar {
