@@ -18,20 +18,18 @@ async function launchBrowser() {
     "--ignore-ssl-errors=yes"
   ];
   return await puppeteer.launch({
-    headless: true,
+    headless: "shell",
+    executablePath: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
     args,
   });
 }
 
 async function configurePage(page) {
   await page.setDefaultNavigationTimeout(60000);
-  await page.setUserAgent(
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-  );
 }
 
-async function testSniff(url) {
-  console.log(`Sniffing: ${url}`);
+async function testSniffArabseed() {
+  console.log("Searching for Goodfellas on Arabseed...");
   const browser = await launchBrowser();
   let caughtStream = null;
   
@@ -71,80 +69,91 @@ async function testSniff(url) {
       }
     });
 
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-    console.log("Page loaded. Title:", await page.title());
+    // Go to search
+    await page.goto("https://arabseed.show/?s=goodfellas", { waitUntil: "domcontentloaded", timeout: 30000 });
+    console.log("Search page loaded. Title:", await page.title());
 
-    // Click Watch Button if exists
-    const watchNowSelector = ".watchNow button, button.watchNow, .watchNow input[type='submit']";
-    const hasWatchButton = await page.evaluate((sel) => {
-      const btn = document.querySelector(sel);
-      if (btn) return true;
-      const buttons = Array.from(document.querySelectorAll("button, input[type='submit'], a"));
-      for (let b of buttons) {
-        const txt = b.innerText || b.textContent || "";
-        if (txt.includes("المشاهده") || txt.includes("المشاهدة")) return true;
-      }
-      return false;
-    }, watchNowSelector);
-
-    if (hasWatchButton) {
-      console.log("Clicking watch button...");
-      await page.evaluate((sel) => {
-        const btn = document.querySelector(sel);
-        if (btn) { btn.click(); return; }
-        const buttons = Array.from(document.querySelectorAll("button, input[type='submit'], a"));
-        for (let b of buttons) {
-          const txt = b.innerText || b.textContent || "";
-          if (txt.includes("المشاهده") || txt.includes("المشاهدة")) { b.click(); return; }
+    // Extract first movie result URL
+    const movieUrl = await page.evaluate(() => {
+      const links = Array.from(document.querySelectorAll("a"));
+      for (let a of links) {
+        const href = a.href || "";
+        const text = (a.innerText || a.textContent || "").toLowerCase();
+        if (href.includes("movie") && text.includes("goodfellas")) {
+          return href;
         }
-      }, watchNowSelector);
-      
-      await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 8000 }).catch(() => {});
-    }
-
-    // Wait 5 seconds to catch stream
-    await new Promise(r => setTimeout(r, 5000));
-
-    if (caughtStream) {
-      console.log("SUCCESS:", caughtStream);
-      return;
-    }
-
-    console.log("Trying DOM extraction...");
-    const embedUrl = await page.evaluate(() => {
-      const serverElements = document.querySelectorAll(".servers, .serversList li, [class*=\"server\"] li, [class*=\"server\"] a, [class*=\"server\"] button");
-      for (let el of serverElements) {
-        const src = el.getAttribute("data-url") || el.getAttribute("data-src") || el.getAttribute("data-link") || el.href;
-        if (src && src.startsWith("http") && !src.includes("youtube.com") && !src.includes("facebook.com")) {
-          return src;
-        }
-      }
-
-      const iframes = Array.from(document.querySelectorAll("iframe"));
-      for (let iframe of iframes) {
-        const src = iframe.src || iframe.getAttribute("data-src");
-        if (src && src.startsWith("http") && !src.includes("youtube.com") && !src.includes("facebook.com")) {
-          return src;
+        if (href.includes("goodfellas") && !href.includes("?s=")) {
+          return href;
         }
       }
       return null;
     });
 
-    console.log("Extracted Embed URL:", embedUrl);
+    console.log("Movie URL on Arabseed:", movieUrl);
 
-    if (embedUrl) {
-      console.log("Navigating to Embed URL...");
-      await page.goto(embedUrl, { waitUntil: "domcontentloaded", timeout: 15000 }).catch(e => console.log("Embed load timeout:", e.message));
-      await new Promise(r => setTimeout(r, 5000));
+    if (movieUrl) {
+      await page.goto(movieUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+      console.log("Movie Page Loaded. Title:", await page.title());
+      
+      // Wait 8 seconds to catch stream
+      await new Promise(r => setTimeout(r, 8000));
+      
+      const watchNowSelector = "a[href*='watch'], button.watch, .watch-btn, a[class*='watch']";
+      const hasWatch = await page.evaluate((sel) => {
+        return !!document.querySelector(sel) || Array.from(document.querySelectorAll("a, button")).some(x => x.innerText.includes("مشاهدة") || x.innerText.includes("المشاهدة"));
+      }, watchNowSelector);
+
+      if (hasWatch) {
+        console.log("Found watch button, clicking...");
+        await page.evaluate((sel) => {
+          const btn = document.querySelector(sel);
+          if (btn) { btn.click(); return; }
+          const links = Array.from(document.querySelectorAll("a, button"));
+          for (let l of links) {
+            if (l.innerText.includes("مشاهدة") || l.innerText.includes("المشاهدة")) {
+              l.click();
+              return;
+            }
+          }
+        }, watchNowSelector);
+        await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 8000 }).catch(() => {});
+      }
+
+      await new Promise(r => setTimeout(r, 8000));
+
+      if (caughtStream) {
+        console.log("SUCCESS Caught Stream:", caughtStream);
+        return;
+      }
+
+      // Try iframe extraction
+      const iframeSrc = await page.evaluate(() => {
+        const frames = Array.from(document.querySelectorAll("iframe"));
+        for (let f of frames) {
+          const src = f.src || f.getAttribute("data-src");
+          if (src && src.startsWith("http") && !src.includes("youtube") && !src.includes("facebook")) {
+            return src;
+          }
+        }
+        return null;
+      });
+
+      console.log("Iframe Source:", iframeSrc);
+      if (iframeSrc) {
+        await page.goto(iframeSrc, { waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {});
+        await new Promise(r => setTimeout(r, 8000));
+      }
+
+      console.log("FINAL Stream:", caughtStream);
+    } else {
+      console.log("Could not find movie page link on Arabseed search results.");
     }
 
-    console.log("FINAL caughtStream:", caughtStream);
-
   } catch (err) {
-    console.error("Error during test:", err);
+    console.error("Error during test:", err.message);
   } finally {
     await browser.close();
   }
 }
 
-testSniff("https://tv9.egydead.live/midsommar-2019-dc-1080p-bluray/").catch(console.error);
+testSniffArabseed().catch(console.error);

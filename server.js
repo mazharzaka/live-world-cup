@@ -170,6 +170,9 @@ async function launchBrowser() {
 
     // ── Media: disable images globally at blink level ──
     "--blink-settings=imagesEnabled=false",
+    
+    // ── CF Bypass ──
+    "--disable-blink-features=AutomationControlled"
   ];
 
   const proxyServer = process.env.PROXY_SERVER; // e.g. http://p.webshare.io:80
@@ -178,11 +181,17 @@ async function launchBrowser() {
     console.log(`📡 [Proxy] Launching browser with proxy: ${proxyServer}`);
   }
 
-  const browser = await puppeteer.launch({
-    headless: true,
+  const options = {
+    headless: "shell",
     args,
-  });
+  };
 
+  // Use local Windows Google Chrome if available for better anti-detection
+  if (process.platform === "win32") {
+    options.executablePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+  }
+
+  const browser = await puppeteer.launch(options);
   return browser;
 }
 
@@ -301,13 +310,13 @@ async function movieSniffer() {
       fallbackBase:
         "https://vid.mycima.cc/categories-cimawbas.php?cat=5-cimawbas-aflam-3arby",
     },
-      {
-      type: "direct_menu_site",
-      source: "egydead",
-      searchKey: "ايجى ديد",
-      fallbackBase:
-        "https://tv9.egydead.live/",
-    },
+    //   {
+    //   type: "direct_menu_site",
+    //   source: "egydead",
+    //   searchKey: "ايجى ديد",
+    //   fallbackBase:
+    //     "https://tv9.egydead.live/",
+    // },
     // {
     //   type: "google_search",
     //   source: "google_arabic",
