@@ -6,6 +6,7 @@ const {
   state,
   fetchCategoryFromDB,
   parseSearchHTML,
+  isValidMovieUrl,
   fetchSearchHTTP,
   getOrSniffStream,
   cleanMovieUrl,
@@ -70,33 +71,36 @@ const search = async (req, res) => {
   if (!query) return res.status(400).json({ error: "Search query required" });
 
   const q = query.toLowerCase().trim();
-  console.log(`🔍 [Search API] Query: "${q}"`);
+  const bypassCache = req.query.bypassCache === "true" || req.query.refresh === "true";
+  console.log(`🔍 [Search API] Query: "${q}" (bypassCache: ${bypassCache})`);
 
   // ══════════════════════════════════════════════════════════════════
   // Layer 1: Search in-memory scraped data (instant — no Puppeteer)
   // ══════════════════════════════════════════════════════════════════
-  const localResults = [];
-  const allCats = ["englishMovies", "arabicMovies", "englishSeries", "arabicSeries"];
-  for (const cat of allCats) {
-    if (state.scrapedData[cat] && state.scrapedData[cat].length > 0) {
-      for (const item of state.scrapedData[cat]) {
-        if (item.title && item.title.toLowerCase().includes(q)) {
-          if (!localResults.some((r) => r.targetUrl === item.targetUrl)) {
-            localResults.push({ ...item, _source: "memory" });
+  if (!bypassCache) {
+    const localResults = [];
+    const allCats = ["englishMovies", "arabicMovies", "englishSeries", "arabicSeries"];
+    for (const cat of allCats) {
+      if (state.scrapedData[cat] && state.scrapedData[cat].length > 0) {
+        for (const item of state.scrapedData[cat]) {
+          if (item.title && item.title.toLowerCase().includes(q)) {
+            if (!localResults.some((r) => r.targetUrl === item.targetUrl)) {
+              localResults.push({ ...item, _source: "memory" });
+            }
           }
         }
       }
     }
-  }
-  if (localResults.length > 0) {
-    console.log(`✅ [Search API] Found ${localResults.length} results from in-memory cache`);
-    return res.json(localResults);
+    if (localResults.length > 0) {
+      console.log(`✅ [Search API] Found ${localResults.length} results from in-memory cache`);
+      return res.json(localResults);
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════
   // Layer 2: Search MongoDB (if memory is empty / server just started)
   // ══════════════════════════════════════════════════════════════════
-  if (mongoose.connection.readyState === 1) {
+  if (!bypassCache && mongoose.connection.readyState === 1) {
     try {
       const dbItems = await Media.find({
         title: { $regex: q, $options: "i" },
@@ -270,18 +274,7 @@ const search = async (req, res) => {
             }
 
             const href = validAnchor?.href;
-            if (
-              !href ||
-              !href.startsWith("http") ||
-              href.includes("twitter.com") ||
-              href.includes("x.com") ||
-              href.includes("youtube.com") ||
-              href.includes("facebook.com") ||
-              href.includes("instagram.com") ||
-              href.includes("t.me") ||
-              href.includes("telegram")
-            )
-              return;
+            if (!href || !href.startsWith("http")) return;
 
             let posterUrl = "";
             const imgEl = card.querySelector("img");
@@ -321,10 +314,12 @@ const search = async (req, res) => {
 
         console.log(`🔍 [Search API] Extracted ${extracted.length} from ${task.source}`);
         extracted.forEach((item) => {
+          let targetLink = item.link;
+          if (!isValidMovieUrl(targetLink)) return;
+
           let cleanTitle = item.title
             .replace(/مشاهدة|فيلم|مسلسل|مترجم|اون لاين/g, "")
             .trim();
-          let targetLink = item.link;
           if (targetLink.includes("mycima") && targetLink.includes("watch.php")) {
             targetLink = targetLink.replace("watch.php", "play.php");
           }

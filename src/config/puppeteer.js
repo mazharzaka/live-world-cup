@@ -71,7 +71,7 @@ async function launchBrowser() {
   }
 
   const options = {
-    headless: true,
+    headless: process.env.NODE_ENV === "production" ? true : false,
     args,
   };
 
