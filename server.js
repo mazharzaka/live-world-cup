@@ -180,7 +180,7 @@ async function launchBrowser() {
   }
 
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: false,
     args,
   });
 
@@ -1152,7 +1152,7 @@ app.get("/api/search", async (req, res) => {
     });
   } else {
     tasks.push({
-      url: `https://tv9.egydead.live/?s=${encodeURIComponent(query)}`,
+      url: `https://topcinemaa.cam/search/?query=${encodeURIComponent(query)}&type=all`,
       source: "egydead",
       key: "englishMovies",
     });
@@ -1443,11 +1443,12 @@ const streamCache = new Map(); // key: watchUrl, value: { streamUrl, type, refer
 async function getOrSniffStream(url) {
   if (!url) return null;
   const cleanUrl = cleanMovieUrl(url);
-  const isEmbedPlayerPage = cleanUrl.includes("embed") || 
-                            cleanUrl.includes("stmruby.com") || 
-                            cleanUrl.includes("streamwish") || 
-                            cleanUrl.includes("doodstream") ||
-                            cleanUrl.includes("streamruby");
+  const isEmbedPlayerPage =
+    cleanUrl.includes("embed") ||
+    cleanUrl.includes("stmruby.com") ||
+    cleanUrl.includes("streamwish") ||
+    cleanUrl.includes("doodstream") ||
+    cleanUrl.includes("streamruby");
 
   const cached = streamCache.get(cleanUrl);
   if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
@@ -1563,20 +1564,37 @@ async function getOrSniffStream(url) {
       try {
         return await page.evaluate(() => {
           const blockedKeywords = [
-            "youtube.com", "youtu.be", "facebook.com", "google.com", "twitter.com", "instagram.com",
-            "dtscout.com", "exoclick.com", "popads.net", "adsterra.com", "doubleclick.net",
-            "google-analytics.com", "histats.com", "onclickads.net", "a.orbsrv.com", "juicyads.com",
-            "exdynsrv.com", "click", "adservice", "analytics", "ads"
+            "youtube.com",
+            "youtu.be",
+            "facebook.com",
+            "google.com",
+            "twitter.com",
+            "instagram.com",
+            "dtscout.com",
+            "exoclick.com",
+            "popads.net",
+            "adsterra.com",
+            "doubleclick.net",
+            "google-analytics.com",
+            "histats.com",
+            "onclickads.net",
+            "a.orbsrv.com",
+            "juicyads.com",
+            "exdynsrv.com",
+            "click",
+            "adservice",
+            "analytics",
+            "ads",
           ];
-          
+
           const isBlocked = (src) => {
             if (!src) return true;
-            return blockedKeywords.some(kw => src.toLowerCase().includes(kw));
+            return blockedKeywords.some((kw) => src.toLowerCase().includes(kw));
           };
 
           // 0. Prioritize checking for explicit server elements (e.g. EgyDead .servers buttons, or class/id containing server)
           const serverElements = document.querySelectorAll(
-            '.servers, .serversList li, [class*="server"] li, [class*="server"] a, [class*="server"] button, [class*="server"], [id*="server"], .server-item'
+            '.servers, .serversList li, [class*="server"] li, [class*="server"] a, [class*="server"] button, [class*="server"], [id*="server"], .server-item',
           );
           for (let el of serverElements) {
             const src =
@@ -1602,7 +1620,7 @@ async function getOrSniffStream(url) {
           }
           // 2. Check video elements directly
           const videos = Array.from(
-            document.querySelectorAll("video source, video[src]")
+            document.querySelectorAll("video source, video[src]"),
           );
           for (let v of videos) {
             const src = v.src || v.getAttribute("data-src");
@@ -1610,11 +1628,11 @@ async function getOrSniffStream(url) {
           }
           // 3. Scan inline scripts for m3u8 URLs
           const scripts = Array.from(
-            document.querySelectorAll("script:not([src])")
+            document.querySelectorAll("script:not([src])"),
           );
           for (let s of scripts) {
             const m = (s.textContent || "").match(
-              /["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/
+              /["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/,
             );
             if (m) return m[1];
           }
@@ -1644,7 +1662,9 @@ async function getOrSniffStream(url) {
     if (!isEmbedPlayerPage) {
       embedUrl = await extractEmbedFromDOM();
       if (embedUrl) {
-        console.log(`🎯 [Sniffer] Quick Exit 1: Found embed URL immediately: ${embedUrl}`);
+        console.log(
+          `🎯 [Sniffer] Quick Exit 1: Found embed URL immediately: ${embedUrl}`,
+        );
         const data = {
           streamUrl: embedUrl,
           type: "iframe",
@@ -1664,7 +1684,7 @@ async function getOrSniffStream(url) {
         const btn = document.querySelector(sel);
         if (btn) return true;
         const buttons = Array.from(
-          document.querySelectorAll("button, input[type='submit'], a")
+          document.querySelectorAll("button, input[type='submit'], a"),
         );
         for (let b of buttons) {
           const txt = b.innerText || b.textContent || "";
@@ -1680,7 +1700,7 @@ async function getOrSniffStream(url) {
 
       if (hasWatchButton) {
         console.log(
-          "🎯 [Sniffer] Found a 'Watch Now' button/form. Clicking it to reveal streams..."
+          "🎯 [Sniffer] Found a 'Watch Now' button/form. Clicking it to reveal streams...",
         );
         await page.evaluate((sel) => {
           const btn = document.querySelector(sel);
@@ -1689,7 +1709,7 @@ async function getOrSniffStream(url) {
             return;
           }
           const buttons = Array.from(
-            document.querySelectorAll("button, input[type='submit'], a")
+            document.querySelectorAll("button, input[type='submit'], a"),
           );
           for (let b of buttons) {
             const txt = b.innerText || b.textContent || "";
@@ -1704,23 +1724,25 @@ async function getOrSniffStream(url) {
         }, watchNowSelector);
 
         console.log(
-          "🎯 [Sniffer] Clicked button, waiting for page navigation..."
+          "🎯 [Sniffer] Clicked button, waiting for page navigation...",
         );
         await page
           .waitForNavigation({ waitUntil: "domcontentloaded", timeout: 8000 })
           .catch((e) => {
             console.log(
-              `⚠️ [Sniffer] Navigation warning after click: ${e.message}`
+              `⚠️ [Sniffer] Navigation warning after click: ${e.message}`,
             );
           });
-          
+
         checkEarlyExit();
-        
+
         // Check again after click/navigation
         if (!isEmbedPlayerPage) {
           embedUrl = await extractEmbedFromDOM();
           if (embedUrl) {
-            console.log(`🎯 [Sniffer] Quick Exit 2: Found embed URL after click: ${embedUrl}`);
+            console.log(
+              `🎯 [Sniffer] Quick Exit 2: Found embed URL after click: ${embedUrl}`,
+            );
             const data = {
               streamUrl: embedUrl,
               type: "iframe",
@@ -1735,7 +1757,7 @@ async function getOrSniffStream(url) {
     } catch (btnErr) {
       console.error(
         "⚠️ [Sniffer] Error checking/clicking Watch Now button:",
-        btnErr.message
+        btnErr.message,
       );
     }
 
@@ -1748,7 +1770,9 @@ async function getOrSniffStream(url) {
         checkEarlyExit();
         embedUrl = await extractEmbedFromDOM();
         if (embedUrl) {
-          console.log(`🎯 [Sniffer] Quick Exit 3: Found embed URL after poll: ${embedUrl}`);
+          console.log(
+            `🎯 [Sniffer] Quick Exit 3: Found embed URL after poll: ${embedUrl}`,
+          );
           const data = {
             streamUrl: embedUrl,
             type: "iframe",
@@ -2525,28 +2549,30 @@ app.get("/api/schedule", (req, res) => res.json(scrapedMatches));
 function isDirectMediaUrl(url) {
   if (!url) return false;
   const lower = url.toLowerCase();
-  return lower.includes(".m3u8") ||
-         lower.includes(".mp4") ||
-         lower.includes(".ts") ||
-         lower.includes(".image") ||
-         lower.includes("urlset") ||
-         lower.includes("segment") ||
-         lower.includes("chunk") ||
-         lower.includes("vkuser.net") ||
-         lower.includes("vk.com") ||
-         lower.endsWith("/video") ||
-         lower.endsWith("/video/");
+  return (
+    lower.includes(".m3u8") ||
+    lower.includes(".mp4") ||
+    lower.includes(".ts") ||
+    lower.includes(".image") ||
+    lower.includes("urlset") ||
+    lower.includes("segment") ||
+    lower.includes("chunk") ||
+    lower.includes("vkuser.net") ||
+    lower.endsWith("/video") ||
+    lower.endsWith("/video/")
+  );
 }
 
 function isHlsUrl(url) {
   if (!url) return false;
   const lower = url.toLowerCase();
-  return lower.includes(".m3u8") ||
-         lower.includes("urlset") ||
-         lower.includes("vkuser.net") ||
-         lower.includes("vk.com") ||
-         lower.endsWith("/video") ||
-         lower.endsWith("/video/");
+  return (
+    lower.includes(".m3u8") ||
+    lower.includes("urlset") ||
+    lower.includes("vkuser.net") ||
+    lower.endsWith("/video") ||
+    lower.endsWith("/video/")
+  );
 }
 
 // تنظيف وتصحيح رابط المشاهدة لسينما وتجنب //watch
@@ -2828,7 +2854,6 @@ app.get("/player", (req, res) => {
       const isHls = streamUrl.includes('.m3u8') || 
                     streamUrl.includes('urlset') || 
                     streamUrl.includes('vkuser.net') || 
-                    streamUrl.includes('vk.com') ||
                     streamUrl.includes('/video');
 
       if (isHls && Hls.isSupported()) {
@@ -2882,11 +2907,9 @@ app.get("/api/media/stream", async (req, res) => {
           );
           targetUrl = match.url;
         } else {
-          return res
-            .status(400)
-            .json({
-              error: "الرابط غير صالح ولم يتم العثور على نتائج بحث مطابقة له",
-            });
+          return res.status(400).json({
+            error: "الرابط غير صالح ولم يتم العثور على نتائج بحث مطابقة له",
+          });
         }
       } catch (e) {
         return res.status(400).json({ error: "الرابط غير صالح" });
@@ -2995,13 +3018,11 @@ app.get("/api/media/stream", async (req, res) => {
     }
   } catch (err) {
     console.error(`❌ Error in /api/media/stream:`, err.stack || err.message);
-    return res
-      .status(500)
-      .json({
-        error: "حدث خطأ أثناء قنص البث",
-        debug: err.message,
-        stack: err.stack,
-      });
+    return res.status(500).json({
+      error: "حدث خطأ أثناء قنص البث",
+      debug: err.message,
+      stack: err.stack,
+    });
   }
 });
 
