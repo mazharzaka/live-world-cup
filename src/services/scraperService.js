@@ -1,7 +1,11 @@
 const mongoose = require("mongoose");
 const Media = require("../models/Media");
 const Match = require("../models/Match");
-const { launchBrowser, configurePage, blockPageResources } = require("../config/puppeteer");
+const {
+  launchBrowser,
+  configurePage,
+  blockPageResources,
+} = require("../config/puppeteer");
 
 // Shared State (Cache)
 const state = {
@@ -229,7 +233,9 @@ async function movieSniffer() {
             );
 
             navLinks.forEach((a) => {
-              const text = (a.textContent || a.innerText || "").toLowerCase().trim();
+              const text = (a.textContent || a.innerText || "")
+                .toLowerCase()
+                .trim();
               const href = a.href;
               if (
                 !href ||
@@ -268,15 +274,30 @@ async function movieSniffer() {
                 cleanText.includes("سوري") ||
                 cleanText.includes("لبناني");
 
-              const isDubbed = cleanText.includes("مدبلج") || cleanText.includes("مدبلجه") || href.includes("dubbed") || href.includes("%d9%85%d8%af%d8%a8%d9%84%d8%ac");
-              const isCartoon = cleanText.includes("كرتون") || cleanText.includes("انمي") || cleanText.includes("ديزني") || href.includes("cartoon") || href.includes("anime") || href.includes("%d9%83%d8%b1%d8%aa%d9%88%d9%86") || href.includes("%d8%a7%d9%86%d9%85%d9%8i");
+              const isDubbed =
+                cleanText.includes("مدبلج") ||
+                cleanText.includes("مدبلجه") ||
+                href.includes("dubbed") ||
+                href.includes("%d9%85%d8%af%d8%a8%d9%84%d8%ac");
+              const isCartoon =
+                cleanText.includes("كرتون") ||
+                cleanText.includes("انمي") ||
+                cleanText.includes("ديزني") ||
+                href.includes("cartoon") ||
+                href.includes("anime") ||
+                href.includes("%d9%83%d8%b1%d8%aa%d9%88%d9%86") ||
+                href.includes("%d8%a7%d9%86%d9%85%d9%8i");
 
               if (hasMovies) {
-                if (isForeign && !isDubbed && !isCartoon) sectionsFound["englishMovies"] = href;
-                else if (isArabic && !isCartoon) sectionsFound["arabicMovies"] = href;
+                if (isForeign && !isDubbed && !isCartoon)
+                  sectionsFound["englishMovies"] = href;
+                else if (isArabic && !isCartoon)
+                  sectionsFound["arabicMovies"] = href;
               } else if (hasSeries) {
-                if (isForeign && !isDubbed && !isCartoon) sectionsFound["englishSeries"] = href;
-                else if (isArabic && !isCartoon) sectionsFound["arabicSeries"] = href;
+                if (isForeign && !isDubbed && !isCartoon)
+                  sectionsFound["englishSeries"] = href;
+                else if (isArabic && !isCartoon)
+                  sectionsFound["arabicSeries"] = href;
               }
             });
             return sectionsFound;
@@ -423,10 +444,14 @@ async function movieSniffer() {
                   card.querySelector("h3") || card.querySelector(".title");
                 let titleText = titleEl
                   ? titleEl.innerText.trim()
-                  : (imgEl ? (imgEl.getAttribute("alt") || imgEl.alt || "").trim() : "");
+                  : imgEl
+                    ? (imgEl.getAttribute("alt") || imgEl.alt || "").trim()
+                    : "";
 
                 if (!titleText || titleText.length < 2) {
-                  titleText = (card.innerText || card.textContent || "").split('\n')[0].trim();
+                  titleText = (card.innerText || card.textContent || "")
+                    .split("\n")[0]
+                    .trim();
                 }
 
                 if (titleText && titleText.length > 2) {
@@ -475,12 +500,18 @@ async function movieSniffer() {
             );
           }
         } catch (err) {
-          console.log(`❌ فشل في ${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}:`, err.message);
+          console.log(
+            `❌ فشل في ${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}:`,
+            err.message,
+          );
         } finally {
           try {
             await page.close();
           } catch (e) {
-            console.log(`⚠️ فشل إغلاق الصفحة (${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}):`, e.message);
+            console.log(
+              `⚠️ فشل إغلاق الصفحة (${task.source === "topcinema" ? "توب سينما" : task.source === "egydead" ? "ايجي ديد" : "عرب سيد"}):`,
+              e.message,
+            );
           }
         }
       }
@@ -499,16 +530,21 @@ async function movieSniffer() {
     }
   }
 
-  const totalCount = tempScrapedData.arabicMovies.length + 
-                     tempScrapedData.englishMovies.length + 
-                     tempScrapedData.arabicSeries.length + 
-                     tempScrapedData.englishSeries.length;
-                    
+  const totalCount =
+    tempScrapedData.arabicMovies.length +
+    tempScrapedData.englishMovies.length +
+    tempScrapedData.arabicSeries.length +
+    tempScrapedData.englishSeries.length;
+
   if (totalCount > 0) {
     state.scrapedData = tempScrapedData;
-    console.log(`✅ [Scraper] Successfully updated scrapedData cache with ${totalCount} items.`);
+    console.log(
+      `✅ [Scraper] Successfully updated scrapedData cache with ${totalCount} items.`,
+    );
   } else {
-    console.warn("⚠️ [Scraper] Scraped 0 items. Retaining previous in-memory cache data to prevent empty UI.");
+    console.warn(
+      "⚠️ [Scraper] Scraped 0 items. Retaining previous in-memory cache data to prevent empty UI.",
+    );
   }
   return totalCount;
 }
@@ -529,110 +565,160 @@ async function fetchCategoryFromDB(category) {
         poster: item.poster,
         targetUrl: item.url,
       }));
-      console.log(`🔌 [DB] Loaded ${state.scrapedData[category].length} items for category: ${category}`);
+      console.log(
+        `🔌 [DB] Loaded ${state.scrapedData[category].length} items for category: ${category}`,
+      );
     }
   } catch (err) {
     console.error(`❌ [DB] Error loading category ${category}:`, err.message);
   }
 }
 
+function isValidMovieUrl(url) {
+  if (!url || !url.startsWith("http")) return false;
+  
+  const lowerUrl = url.toLowerCase();
+  if (
+    lowerUrl.includes("twitter.com") ||
+    lowerUrl.includes("x.com") ||
+    lowerUrl.includes("youtube.com") ||
+    lowerUrl.includes("youtu.be") ||
+    lowerUrl.includes("facebook.com") ||
+    lowerUrl.includes("instagram.com") ||
+    lowerUrl.includes("t.me") ||
+    lowerUrl.includes("telegram") ||
+    lowerUrl.includes("javascript:") ||
+    lowerUrl.includes("#")
+  ) {
+    return false;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    const path = parsedUrl.pathname;
+    
+    // Homepage and standard index files
+    if (path === "/" || path === "" || path === "/index.php" || path === "/index.html") {
+      return false;
+    }
+
+    // Listing/Archive/Utility pages
+    if (
+      path.includes("/category/") ||
+      path.includes("/actor/") ||
+      path.includes("/genre/") ||
+      path.includes("/year/") ||
+      path.includes("/tag/") ||
+      path.includes("/tags/") ||
+      path.includes("/recent") ||
+      path.includes("/contact") ||
+      path.includes("/privacy") ||
+      path.includes("/dmca") ||
+      path.includes("/about") ||
+      path.includes("/page/") ||
+      path.includes("/search")
+    ) {
+      return false;
+    }
+  } catch (e) {
+    return false;
+  }
+
+  return true;
+}
+
 function parseSearchHTML(html, taskKey) {
   const items = [];
-  const anchorImgRegex = /<a\s+[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?<img\s+[^>]*>[\s\S]*?)<\/a>/gi;
+  const anchorImgRegex =
+    /<a\s+[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?<img\s+[^>]*>[\s\S]*?)<\/a>/gi;
   let match;
-  
+
   while ((match = anchorImgRegex.exec(html)) !== null) {
     const href = match[1];
     const innerContent = match[2];
-    
-    if (
-      href.includes("/category/") || 
-      href.includes("/actor/") || 
-      href.includes("/genre/") || 
-      href.includes("/year/") || 
-      href.includes("/tag/") ||
-      href.includes("/tags/") ||
-      href.includes("twitter.com") ||
-      href.includes("x.com") ||
-      href.includes("youtube.com") ||
-      href.includes("facebook.com") ||
-      href.includes("instagram.com") ||
-      href.includes("t.me") ||
-      href.includes("telegram") ||
-      href.includes("javascript:") ||
-      href.includes("#")
-    ) {
+
+    if (!isValidMovieUrl(href)) {
       continue;
     }
-    
+
     let poster = "";
-    const imgMatch = innerContent.match(/<img\s+[^>]*(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i);
+    const imgMatch = innerContent.match(
+      /<img\s+[^>]*(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i,
+    );
     if (imgMatch) {
       poster = imgMatch[1];
     }
-    if (!poster || poster.includes("melody-lzld") || poster.includes("logo") || poster.includes("blank")) {
-      const srcMatch = innerContent.match(/<img\s+[^>]*src=["'](https?:\/\/[^"']+)["']/i);
+    if (
+      !poster ||
+      poster.includes("melody-lzld") ||
+      poster.includes("logo") ||
+      poster.includes("blank")
+    ) {
+      const srcMatch = innerContent.match(
+        /<img\s+[^>]*src=["'](https?:\/\/[^"']+)["']/i,
+      );
       if (srcMatch) poster = srcMatch[1];
     }
-    if (!poster || poster.includes("melody-lzld") || poster.includes("logo") || poster.includes("blank")) {
+    if (
+      !poster ||
+      poster.includes("melody-lzld") ||
+      poster.includes("logo") ||
+      poster.includes("blank")
+    ) {
       poster = "https://placehold.co/300x450/1a1a1a/FFF?text=Poster";
     }
-    
+
     let title = "";
-    const altMatch = innerContent.match(/alt=["']([^"']+)["']/i) || innerContent.match(/title=["']([^"']+)["']/i);
+    const altMatch =
+      innerContent.match(/alt=["']([^"']+)["']/i) ||
+      innerContent.match(/title=["']([^"']+)["']/i);
     if (altMatch) {
       title = altMatch[1].trim();
     }
-    
+
     if (!title || title.length < 2) {
       const textMatch = innerContent.replace(/<[^>]*>/g, "").trim();
       if (textMatch) title = textMatch;
     }
-    
+
     title = title.replace(/\s+/g, " ").trim();
-    
+
     if (title && title.length > 2) {
-      if (!items.some(i => i.link === href)) {
+      if (!items.some((i) => i.link === href)) {
         items.push({ title, poster, link: href });
       }
     }
   }
-  
+
   if (items.length === 0) {
-    const cardRegex = /<(div|a|article)[^>]+class="[^"]*(Small--Box|pm-video-thumb|pm-li-video|thumbnail|movie|card|content)[^"]*"[^>]*>([\s\S]*?)<\/\1>/gi;
+    const cardRegex =
+      /<(div|a|article)[^>]+class="[^"]*(Small--Box|pm-video-thumb|pm-li-video|thumbnail|movie|card|content)[^"]*"[^>]*>([\s\S]*?)<\/\1>/gi;
     let cardMatch;
     while ((cardMatch = cardRegex.exec(html)) !== null) {
       const cardContent = cardMatch[3];
       const hrefMatch = cardContent.match(/href=["'](https?:\/\/[^"']+)["']/i);
       if (!hrefMatch) continue;
       const href = hrefMatch[1];
-      if (
-        href.includes("/category/") || 
-        href.includes("/actor/") || 
-        href.includes("/genre/") ||
-        href.includes("twitter.com") ||
-        href.includes("x.com") ||
-        href.includes("youtube.com") ||
-        href.includes("facebook.com") ||
-        href.includes("instagram.com") ||
-        href.includes("t.me") ||
-        href.includes("telegram")
-      ) continue;
-      
+      if (!isValidMovieUrl(href)) {
+        continue;
+      }
+
       let poster = "";
-      const imgMatch = cardContent.match(/(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i);
+      const imgMatch = cardContent.match(
+        /(?:data-src|data-lazy-src|data-echo|src)=["'](https?:\/\/[^"']+)["']/i,
+      );
       if (imgMatch) poster = imgMatch[1];
-      
+
       let title = "";
       const h3Match = cardContent.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
       if (h3Match) title = h3Match[1].replace(/<[^>]*>/g, "").trim();
-      
-      if (title && title.length > 2 && !items.some(i => i.link === href)) {
+
+      if (title && title.length > 2 && !items.some((i) => i.link === href)) {
         items.push({ title, poster, link: href });
       }
     }
   }
-  
+
   return items;
 }
 
@@ -641,20 +727,23 @@ async function fetchSearchHTTP(url) {
   const origin = urlObj.origin;
 
   const headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    Accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     "Accept-Language": "ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7",
     "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-    "Referer": `${origin}/`,
-    "sec-ch-ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+    Pragma: "no-cache",
+    Referer: `${origin}/`,
+    "sec-ch-ua":
+      '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": '"Windows"',
     "sec-fetch-dest": "document",
     "sec-fetch-mode": "navigate",
     "sec-fetch-site": "same-origin",
     "sec-fetch-user": "?1",
-    "upgrade-insecure-requests": "1"
+    "upgrade-insecure-requests": "1",
   };
 
   const controller = new AbortController();
@@ -663,14 +752,17 @@ async function fetchSearchHTTP(url) {
     const response = await fetch(url, {
       headers,
       method: "GET",
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(timeoutId);
     if (!response.ok) {
       throw new Error(`HTTP status ${response.status}`);
     }
     const html = await response.text();
-    const isCF = html.includes("Cloudflare") || html.includes("Just a moment") || html.includes("Security Check");
+    const isCF =
+      html.includes("Cloudflare") ||
+      html.includes("Just a moment") ||
+      html.includes("Security Check");
     if (isCF) {
       throw new Error("Blocked by Cloudflare DDoS page");
     }
@@ -717,7 +809,9 @@ async function getOrSniffStream(url) {
         const reqUrl = r.url().toLowerCase();
         const resourceType = r.resourceType();
         if (
-          ["image", "stylesheet", "font", "ping", "manifest"].includes(resourceType)
+          ["image", "stylesheet", "font", "ping", "manifest"].includes(
+            resourceType,
+          )
         ) {
           r.abort().catch(() => {});
           return;
@@ -797,14 +891,20 @@ async function getOrSniffStream(url) {
     checkEarlyExit();
 
     try {
-      const watchNowSelector = ".watchNow button, button.watchNow, .watchNow input[type='submit']";
+      const watchNowSelector =
+        ".watchNow button, button.watchNow, .watchNow input[type='submit']";
       const hasWatchButton = await page.evaluate((sel) => {
         const btn = document.querySelector(sel);
         if (btn) return true;
-        const buttons = Array.from(document.querySelectorAll("button, input[type='submit'], a"));
+        const buttons = Array.from(
+          document.querySelectorAll("button, input[type='submit'], a"),
+        );
         for (let b of buttons) {
           const txt = b.innerText || b.textContent || "";
-          if (txt.includes("المشاهده والتحميل") || txt.includes("المشاهدة والتحميل")) {
+          if (
+            txt.includes("المشاهده والتحميل") ||
+            txt.includes("المشاهدة والتحميل")
+          ) {
             return true;
           }
         }
@@ -812,30 +912,46 @@ async function getOrSniffStream(url) {
       }, watchNowSelector);
 
       if (hasWatchButton) {
-        console.log("🎯 [Sniffer] Found a 'Watch Now' button/form. Clicking it to reveal streams...");
+        console.log(
+          "🎯 [Sniffer] Found a 'Watch Now' button/form. Clicking it to reveal streams...",
+        );
         await page.evaluate((sel) => {
           const btn = document.querySelector(sel);
           if (btn) {
             btn.click();
             return;
           }
-          const buttons = Array.from(document.querySelectorAll("button, input[type='submit'], a"));
+          const buttons = Array.from(
+            document.querySelectorAll("button, input[type='submit'], a"),
+          );
           for (let b of buttons) {
             const txt = b.innerText || b.textContent || "";
-            if (txt.includes("المشاهده والتحميل") || txt.includes("المشاهدة والتحميل")) {
+            if (
+              txt.includes("المشاهده والتحميل") ||
+              txt.includes("المشاهدة والتحميل")
+            ) {
               b.click();
               return;
             }
           }
         }, watchNowSelector);
-        
-        console.log("🎯 [Sniffer] Clicked button, waiting for page navigation...");
-        await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 8000 }).catch((e) => {
-          console.log(`⚠️ [Sniffer] Navigation warning after click: ${e.message}`);
-        });
+
+        console.log(
+          "🎯 [Sniffer] Clicked button, waiting for page navigation...",
+        );
+        await page
+          .waitForNavigation({ waitUntil: "domcontentloaded", timeout: 8000 })
+          .catch((e) => {
+            console.log(
+              `⚠️ [Sniffer] Navigation warning after click: ${e.message}`,
+            );
+          });
       }
     } catch (btnErr) {
-      console.error("⚠️ [Sniffer] Error checking/clicking Watch Now button:", btnErr.message);
+      console.error(
+        "⚠️ [Sniffer] Error checking/clicking Watch Now button:",
+        btnErr.message,
+      );
     }
 
     checkEarlyExit();
@@ -851,15 +967,21 @@ async function getOrSniffStream(url) {
     let embedUrl = null;
     try {
       embedUrl = await page.evaluate(() => {
-        const serverElements = document.querySelectorAll(".servers, .serversList li, [class*=\"server\"] li, [class*=\"server\"] a, [class*=\"server\"] button, [class*=\"server\"], [id*=\"server\"], .server-item");
+        const serverElements = document.querySelectorAll(
+          '.servers, .serversList li, [class*="server"] li, [class*="server"] a, [class*="server"] button, [class*="server"], [id*="server"], .server-item',
+        );
         for (let el of serverElements) {
-          const src = el.getAttribute("data-url") || el.getAttribute("data-src") || el.getAttribute("data-link") || el.href;
+          const src =
+            el.getAttribute("data-url") ||
+            el.getAttribute("data-src") ||
+            el.getAttribute("data-link") ||
+            el.href;
           if (
-            src && 
-            src.startsWith("http") && 
-            !src.includes("youtube.com") && 
-            !src.includes("youtu.be") && 
-            !src.includes("facebook.com") && 
+            src &&
+            src.startsWith("http") &&
+            !src.includes("youtube.com") &&
+            !src.includes("youtu.be") &&
+            !src.includes("facebook.com") &&
             !src.includes("twitter.com") &&
             !src.includes("google.com")
           ) {
@@ -874,11 +996,11 @@ async function getOrSniffStream(url) {
             iframe.getAttribute("data-src") ||
             iframe.getAttribute("data-lazy-src");
           if (
-            src && 
-            src.startsWith("http") && 
-            !src.includes("youtube.com") && 
-            !src.includes("youtu.be") && 
-            !src.includes("facebook.com") && 
+            src &&
+            src.startsWith("http") &&
+            !src.includes("youtube.com") &&
+            !src.includes("youtu.be") &&
+            !src.includes("facebook.com") &&
             !src.includes("google.com") &&
             !src.includes("twitter.com") &&
             !src.includes("instagram.com")
@@ -983,8 +1105,7 @@ async function getOrSniffStream(url) {
             if (window.videojs && window.videojs.players) {
               for (let key of Object.keys(window.videojs.players)) {
                 const p = window.videojs.players[key];
-                if (p && p.currentSrc && p.currentSrc())
-                  return p.currentSrc();
+                if (p && p.currentSrc && p.currentSrc()) return p.currentSrc();
                 if (p && p.src && p.src()) return p.src();
               }
             }
@@ -1056,7 +1177,7 @@ async function getOrSniffStream(url) {
               await new Promise((r) => setTimeout(r, 500));
             }
           }
-          
+
           checkEarlyExit();
 
           await Promise.race([
@@ -1262,9 +1383,15 @@ async function masterSniffer() {
       "https://www.kooracity.com",
       "https://www.yalla-shoot-4u.com",
       "https://egykoora.com/",
+<<<<<<< HEAD
       "https://live-soccer.tv/",
       "https://www.365kooora.xyz/",
       "https://kooora4liv.com/",
+=======
+      "https://koora-yallashoot.live/",
+      "https://koora-yallashoot.live/",
+      "https://kora365tv.com/",
+>>>>>>> 5f209ddeac7b708d4fcaf00d6f8e03e11405c380
     ];
 
     for (let url of REAL_LIVE_TARGETS) {
@@ -1635,7 +1762,9 @@ async function runHourlyCronJob() {
   console.log("🎬 [Cron Job] Running movieSniffer to update movie lists...");
   const totalScraped = await movieSniffer();
   if (!totalScraped || totalScraped === 0) {
-    console.warn("⚠️ [Cron Job] movieSniffer returned 0 items. Skipping database update to preserve existing cache.");
+    console.warn(
+      "⚠️ [Cron Job] movieSniffer returned 0 items. Skipping database update to preserve existing cache.",
+    );
     return;
   }
 
@@ -1733,18 +1862,27 @@ async function initializeStartup() {
       movieCount = await Media.countDocuments({});
       console.log(`🔌 [DB Check] Database contains ${movieCount} media items.`);
     } catch (err) {
-      console.error("❌ [DB Check] Error counting media documents:", err.message);
+      console.error(
+        "❌ [DB Check] Error counting media documents:",
+        err.message,
+      );
     }
   }
 
   if (movieCount > 0) {
-    console.log("🚀 [Startup] Skipping initial scraping job since database has seeded data.");
+    console.log(
+      "🚀 [Startup] Skipping initial scraping job since database has seeded data.",
+    );
   } else {
-    console.log("🚀 [Startup] Database is empty. Scheduling initial movie scraping in the background after 90 seconds...");
+    console.log(
+      "🚀 [Startup] Database is empty. Scheduling initial movie scraping in the background after 90 seconds...",
+    );
     setTimeout(() => {
-      console.log("⏰ [Startup Background] Starting initial movie scraping job now...");
+      console.log(
+        "⏰ [Startup Background] Starting initial movie scraping job now...",
+      );
       runHourlyCronJob().catch((err) =>
-        console.error("Error running background startup cron job:", err)
+        console.error("Error running background startup cron job:", err),
       );
     }, 90000);
   }
@@ -1761,6 +1899,7 @@ module.exports = {
   movieSniffer,
   fetchCategoryFromDB,
   parseSearchHTML,
+  isValidMovieUrl,
   fetchSearchHTTP,
   getOrSniffStream,
   isValidStreamLink,

@@ -32,16 +32,18 @@ function SearchResults() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const fetchMovies = async () => {
+  const fetchMovies = async (forceBypass = false) => {
     if (!query) return;
 
     setIsLoading(true);
     setError(null);
     try {
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-      const response = await fetch(
-        `${apiBaseUrl}/api/search?q=${encodeURIComponent(query)}`,
-      );
+      let apiUrl = `${apiBaseUrl}/api/search?q=${encodeURIComponent(query)}`;
+      if (forceBypass) {
+        apiUrl += "&bypassCache=true";
+      }
+      const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error("فشل جلب البيانات من الخادم");
       }
@@ -56,7 +58,7 @@ function SearchResults() {
   };
 
   useEffect(() => {
-    fetchMovies();
+    fetchMovies(false);
   }, [query]);
 
   if (!query) {
@@ -85,15 +87,27 @@ function SearchResults() {
 
   return (
     <div className="movies-grid-container">
-      <h1 className="movies-page-title">
-        <Search
-          size={28}
-          className="text-primary"
-          style={{ color: "var(--clr-primary)" }}
-        />
-        نتائج البحث عن:{" "}
-        <span style={{ color: "var(--clr-accent)" }}>"{query}"</span>
-      </h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", flexWrap: "wrap", gap: "12px", marginBottom: "30px" }}>
+        <h1 className="movies-page-title" style={{ marginBottom: 0 }}>
+          <Search
+            size={28}
+            className="text-primary"
+            style={{ color: "var(--clr-primary)" }}
+          />
+          نتائج البحث عن:{" "}
+          <span style={{ color: "var(--clr-accent)" }}>"{query}"</span>
+        </h1>
+        {!isLoading && (
+          <button
+            onClick={() => fetchMovies(true)}
+            className="retry-btn"
+            style={{ marginTop: 0, padding: "8px 16px", fontSize: "13px" }}
+            title="البحث مجدداً مباشرة من المواقع وتحديث الكاش"
+          >
+            🔄 تحديث النتائج
+          </button>
+        )}
+      </div>
 
       {isLoading && <MovieSkeletonGrid />}
 
