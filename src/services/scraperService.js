@@ -1383,15 +1383,9 @@ async function masterSniffer() {
       "https://www.kooracity.com",
       "https://www.yalla-shoot-4u.com",
       "https://egykoora.com/",
-<<<<<<< HEAD
-      "https://live-soccer.tv/",
-      "https://www.365kooora.xyz/",
-      "https://kooora4liv.com/",
-=======
       "https://koora-yallashoot.live/",
       "https://koora-yallashoot.live/",
       "https://kora365tv.com/",
->>>>>>> 5f209ddeac7b708d4fcaf00d6f8e03e11405c380
     ];
 
     for (let url of REAL_LIVE_TARGETS) {
