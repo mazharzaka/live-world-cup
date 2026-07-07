@@ -1263,8 +1263,8 @@ async function masterSniffer() {
       "https://www.yalla-shoot-4u.com",
       "https://egykoora.com/",
       "https://live-soccer.tv/",
-      "https://koora-llive.best/",
-      "https://www.freekora.com",
+      "https://www.365kooora.xyz/",
+      "https://kooora4liv.com/",
     ];
 
     for (let url of REAL_LIVE_TARGETS) {

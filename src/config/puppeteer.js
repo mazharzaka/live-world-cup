@@ -71,7 +71,7 @@ async function launchBrowser() {
   }
 
   const options = {
-    headless: true,
+    headless: false, // Set to true for production; false for debugging
     args,
   };
 
