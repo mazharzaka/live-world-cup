@@ -71,55 +71,7 @@ const search = async (req, res) => {
   if (!query) return res.status(400).json({ error: "Search query required" });
 
   const q = query.toLowerCase().trim();
-  const bypassCache = req.query.bypassCache === "true" || req.query.refresh === "true";
-  console.log(`🔍 [Search API] Query: "${q}" (bypassCache: ${bypassCache})`);
-
-  // ══════════════════════════════════════════════════════════════════
-  // Layer 1: Search in-memory scraped data (instant — no Puppeteer)
-  // ══════════════════════════════════════════════════════════════════
-  if (!bypassCache) {
-    const localResults = [];
-    const allCats = ["englishMovies", "arabicMovies", "englishSeries", "arabicSeries"];
-    for (const cat of allCats) {
-      if (state.scrapedData[cat] && state.scrapedData[cat].length > 0) {
-        for (const item of state.scrapedData[cat]) {
-          if (item.title && item.title.toLowerCase().includes(q)) {
-            if (!localResults.some((r) => r.targetUrl === item.targetUrl)) {
-              localResults.push({ ...item, _source: "memory" });
-            }
-          }
-        }
-      }
-    }
-    if (localResults.length > 0) {
-      console.log(`✅ [Search API] Found ${localResults.length} results from in-memory cache`);
-      return res.json(localResults);
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════════
-  // Layer 2: Search MongoDB (if memory is empty / server just started)
-  // ══════════════════════════════════════════════════════════════════
-  if (!bypassCache && mongoose.connection.readyState === 1) {
-    try {
-      const dbItems = await Media.find({
-        title: { $regex: q, $options: "i" },
-      }).limit(50);
-      if (dbItems && dbItems.length > 0) {
-        const dbResults = dbItems.map((item) => ({
-          id: item._id.toString(),
-          title: item.title,
-          poster: item.poster,
-          targetUrl: item.url,
-          _source: "db",
-        }));
-        console.log(`✅ [Search API] Found ${dbResults.length} results from MongoDB`);
-        return res.json(dbResults);
-      }
-    } catch (dbErr) {
-      console.error("⚠️ [Search API] DB search error:", dbErr.message);
-    }
-  }
+  console.log(`🔍 [Search API] Query: "${q}" (Cache bypassed/disabled)`);
 
   // Define active domains for search targets
   const activeDomains = {

@@ -630,7 +630,7 @@ function isValidMovieUrl(url) {
 function parseSearchHTML(html, taskKey) {
   const items = [];
   const anchorImgRegex =
-    /<a\s+[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?<img\s+[^>]*>[\s\S]*?)<\/a>/gi;
+    /<a\s+[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>((?:(?!<\/?a)[\s\S])*?<img\s+[^>]*>(?:(?!<\/?a)[\s\S])*?)<\/a>/gi;
   let match;
 
   while ((match = anchorImgRegex.exec(html)) !== null) {
