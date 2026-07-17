@@ -1742,7 +1742,7 @@ function cleanMovieUrl(url) {
   if (clean.includes("rgetUrl=")) {
     clean = decodeURIComponent(clean.split("rgetUrl=")[1]);
   }
-  if (clean.includes("topcinema")) {
+  if (clean.includes("topcinema") || clean.includes("topcinma")) {
     clean = clean.replace(/\/+watch\/?$/, "");
     clean = clean.endsWith("/") ? clean + "watch" : clean + "/watch";
   } else if (clean.includes("asd.ink") || clean.includes("arabseed")) {
@@ -1783,7 +1783,7 @@ async function runHourlyCronJob() {
             title: item.title,
             url: item.targetUrl,
             poster: item.poster,
-            platform: item.targetUrl.includes("topcinema")
+            platform: item.targetUrl.includes("topcinema") || item.targetUrl.includes("topcinma")
               ? "topcinema"
               : item.targetUrl.includes("arabseed") ||
                   item.targetUrl.includes("asd")
@@ -1863,23 +1863,17 @@ async function initializeStartup() {
     }
   }
 
-  if (movieCount > 0) {
+  console.log(
+    "🚀 [Startup] Scheduling initial movie scraping in the background after 2 seconds...",
+  );
+  setTimeout(() => {
     console.log(
-      "🚀 [Startup] Skipping initial scraping job since database has seeded data.",
+      "⏰ [Startup Background] Starting initial movie scraping job now...",
     );
-  } else {
-    console.log(
-      "🚀 [Startup] Database is empty. Scheduling initial movie scraping in the background after 90 seconds...",
+    runHourlyCronJob().catch((err) =>
+      console.error("Error running background startup cron job:", err),
     );
-    setTimeout(() => {
-      console.log(
-        "⏰ [Startup Background] Starting initial movie scraping job now...",
-      );
-      runHourlyCronJob().catch((err) =>
-        console.error("Error running background startup cron job:", err),
-      );
-    }, 90000);
-  }
+  }, 2000);
 }
 
 // Pre-populate with fallback matches immediately

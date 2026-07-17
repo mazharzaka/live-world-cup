@@ -81,7 +81,7 @@ const search = async (req, res) => {
 
   if (mongoose.connection.readyState === 1) {
     try {
-      const topDoc = await Media.findOne({ url: { $regex: "topcinema" } }).sort({ fetchedAt: -1 });
+      const topDoc = await Media.findOne({ url: { $regex: "topcinema|topcinma" } }).sort({ fetchedAt: -1 });
       if (topDoc) activeDomains.topcinema = new URL(topDoc.url).origin;
 
       const seedDoc = await Media.findOne({ url: { $regex: "asd|arabseed" } }).sort({ fetchedAt: -1 });

@@ -32,7 +32,7 @@ connectDB()
   .then(async () => {
     await initializeStartup();
 
-    // Schedule initial matches scraping after 45 seconds to avoid high RAM/CPU on boot
+    // Start matches scraping (masterSniffer) immediately on startup (1 second delay)
     setTimeout(() => {
       console.log(
         "⏰ [Startup Background] Starting initial matches scraping (masterSniffer) now...",
@@ -43,7 +43,7 @@ connectDB()
 
       // Repeat the process every 15 minutes
       setInterval(masterSniffer, 15 * 60 * 1000);
-    }, 45000);
+    }, 1000);
 
     // Hourly Cron Job using node-cron (0 * * * * = every hour)
     cron.schedule("0 * * * *", async () => {
@@ -64,4 +64,17 @@ connectDB()
     );
     console.log("⚠️ Starting server in Fallback Mode (No DB connection)...");
     initializeStartup();
+
+    // Start matches scraping (masterSniffer) immediately on startup in fallback mode
+    setTimeout(() => {
+      console.log(
+        "⏰ [Startup Background - Fallback] Starting initial matches scraping (masterSniffer) now...",
+      );
+      masterSniffer().catch((err) =>
+        console.error("Error in initial masterSniffer (Fallback):", err),
+      );
+
+      // Repeat the process every 15 minutes
+      setInterval(masterSniffer, 15 * 60 * 1000);
+    }, 1000);
   });
