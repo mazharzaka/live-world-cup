@@ -1382,9 +1382,9 @@ async function masterSniffer() {
     const REAL_LIVE_TARGETS = [
       "https://www.kooracity.com",
       "https://www.yalla-shoot-4u.com",
-      "https://egykoora.com/",
-      "https://koora-yallashoot.live/",
-      "https://koora-yallashoot.live/",
+      "https://kooraworld.net/",
+      "https://kooraeuropa.com/",
+      "https://kora-live-hd.live/",
       "https://kora365tv.com/",
     ];
 
